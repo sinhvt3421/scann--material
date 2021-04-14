@@ -95,8 +95,7 @@ class SGDR(tf.keras.callbacks.Callback):
         if self.cycle_iterations >= self.base_epochs * (self.mul_epochs ** self.cycles):
             self.cycles += 1
             self.cycle_iterations = 0
-            self.max_lr = self.min_lr
-            self.min_lr = max(1e-5,self.min_lr / 10)
+            self.max_lr = self.max_lr / 2
             tf.keras.backend.set_value(self.model.optimizer.lr, self.max_lr)
         else:
             tf.keras.backend.set_value(self.model.optimizer.lr, self.sgdr())
@@ -129,21 +128,12 @@ class CosineAnnealingScheduler(tf.keras.callbacks.Callback):
 
 
 def main(args):
-    config = yaml.safe_load(open('configs/model_qm9_sdf.yaml'))
+    config = yaml.safe_load(open(args.dataset))
     print('Create model')
     model = create_model(config)
 
-    print('Load data neighbors')
-    all_data = []
-    data_neigh = np.load(config['hyper']['data_nei_path'], allow_pickle=True)
-    all_data.extend(data_neigh)
-    all_data.extend(
-        np.load('preprocess/qm9/qm9_voroinn_neigh_full_info_50k-100k.npy', allow_pickle=True))
-
-    all_data.extend(
-        np.load('preprocess/qm9/qm9_voroinn_neigh_full_info_100k.npy', allow_pickle=True))
-
-    all_data = np.array(all_data, dtype='object')
+    print('Load data neighbors for dataset ', args.dataset)
+    all_data = np.load(config['hyper']['data_nei_path'], allow_pickle=True)
 
     print('Load data target: ', args.target)
     data_full = np.load(
@@ -258,6 +248,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('target', type=str,
                         help='Target energy for training')
-
+    parser.add_argument('dataset',type=str,help='Path to dataset configs')
     args = parser.parse_args()
     main(args)

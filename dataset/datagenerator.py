@@ -48,7 +48,8 @@ class DataIterator(object):
     def __init__(self, type, batch_size=32, nsample=0,
                  indices=None, data_neigh=None, data_energy=None,
                  data_ofm=None, use_ofm=False, mean=0.0, std=1.0,
-                 intensive=True, converter=True, datatype='M'):
+                 intensive=True, converter=True, datatype='M',
+                 centers= np.linspace(0, 4, 20)):
         """
         Params:
             intensive: Whether divide properties by number of atoms in a structure, default 1
@@ -78,7 +79,7 @@ class DataIterator(object):
             self.converter = Hartree / eV * 1000
         else:
             self.converter = 1.0
-        self.expand = GaussianDistance()
+        self.expand = GaussianDistance(centers)
 
     def get_scaler(self):
         new_targets = []
@@ -103,7 +104,7 @@ class DataIterator(object):
             n_atom = 1
         return (target / n_atom - self.mean) / self.std
 
-    def _get_batches_of_transformed_samples(self, idx):
+    def _get_batches_of_transformed_samples(self, idx: list) -> tuple:
         batch_nei = self.data_neigh[idx]
         batch_atom = self.engery[idx]
         if self.use_ofm:
@@ -170,6 +171,7 @@ class DataIterator(object):
 
         if self.use_ofm:
             inputs['computed_ofm'] = pad_ofm
+
         if self.datatype == 'M':
             inputs['ring_aromatic'] = pad_extra
             

@@ -163,7 +163,8 @@ class DAMNet(tf.keras.models.Model):
     def __init__(self, config):
         super(DAMNet, self).__init__()
         self.n_attention = config['n_attention']
-
+        self.mol = config['datatype'] == 'M'
+        
         # n layers Local Attention
         self.local_attention = [LocalAttention(name='attn_Lc_'+str(i), v_dim=config['v_dim'],
                                                dim=config['dim'], num_head=config['num_head'])
@@ -213,14 +214,19 @@ class DAMNet(tf.keras.models.Model):
             1, name='predict_property')
 
     def call(self, inputs, train=True, lats_attn=True):
-        atoms, ring_info, mask_atom, local, mask, local_weight, local_distance = inputs
+        if self.mol:
+            atoms, ring_info, mask_atom, local, mask, local_weight, local_distance = inputs
+        else:
+            atoms, mask_atom, local, mask, local_weight, local_distance = inputs
+
 
         # embedding atom and extra information as ring, aromatic
         embed_atom = self.embed_atom(atoms)
-        embed_ring = self.extra_embed(ring_info)
-
-        # shape embed_atom [bs, len_atom_centers, n_embedding + 10]
-        embed_atom = tf.concat([embed_atom, embed_ring], -1)
+        if self.mol:
+            embed_ring = self.extra_embed(ring_info)
+            # shape embed_atom [bs, len_atom_centers, n_embedding + 10]
+            embed_atom = tf.concat([embed_atom, embed_ring], -1)
+            
         dense_embed = self.dense_embed(embed_atom)
 
         # get neighbor vector from local indices
@@ -293,8 +299,10 @@ class DAMNet(tf.keras.models.Model):
 def create_model(config):
 
     atomic = tf.keras.layers.Input(name='atomic', shape=(None,), dtype='int32')
-    ring_info = tf.keras.layers.Input(
-        name='ring_aromatic', shape=(None, 2), dtype='float32')
+
+    if config['model']['datatype'] == 'M':
+        ring_info = tf.keras.layers.Input(
+            name='ring_aromatic', shape=(None, 2), dtype='float32')
 
     mask_atom = tf.keras.layers.Input(shape=[None, 1], name='mask_atom')
 
@@ -308,11 +316,15 @@ def create_model(config):
         name='local_distance', shape=(None, None, 20), dtype='float32')
 
     dammodel = DAMNet(config['model'])
-    out = dammodel([atomic, ring_info, mask_atom, local, mask_local,
-                    local_weight, local_distance])
+    if config['hyper']['datatype'] == 'M':
+        inputs = [atomic, ring_info,  mask_atom, local, mask_local, local_weight, local_distance]
+    else:
+        inputs = [atomic,  mask_atom, local, mask_local, local_weight, local_distance]
+
+    out = dammodel(inputs)
 
     model = tf.keras.Model(
-        inputs=[atomic, ring_info,  mask_atom, local, mask_local, local_weight, local_distance], outputs=[out])
+        inputs=inputs, outputs=[out])
 
     model.summary()
     model.compile(loss=root_mean_squared_error,
@@ -324,8 +336,10 @@ def create_model(config):
 
 def create_model_infer(config):
     atomic = tf.keras.layers.Input(name='atomic', shape=(None,), dtype='int32')
-    ring_info = tf.keras.layers.Input(
-        name='ring_aromatic', shape=(None, 2), dtype='int32')
+    if config['model']['datatype'] == 'M':
+        ring_info = tf.keras.layers.Input(
+            name='ring_aromatic', shape=(None, 2), dtype='float32')
+
     mask_atom = tf.keras.layers.Input(shape=[None, 1], name='mask_atom')
 
     local = tf.keras.layers.Input(
@@ -338,11 +352,15 @@ def create_model_infer(config):
         name='local_distance', shape=(None, None, 20), dtype='float32')
 
     dammodel = DAMNet(config['model'])
-    out_energy, context, attn_local, attn_global, struc_rep, dense_embed = dammodel([atomic, ring_info, mask_atom, local, mask_local,
-                                                                                     local_weight, local_distance], False, True)
+    if config['model']['datatype'] == 'M':
+        inputs = [atomic, ring_info,  mask_atom, local, mask_local, local_weight, local_distance]
+    else:
+        inputs = [atomic,  mask_atom, local, mask_local, local_weight, local_distance]
+
+    out_energy, context, attn_local, attn_global, struc_rep, dense_embed = dammodel(inputs, False, True)
 
     model = tf.keras.Model(
-        inputs=[atomic, ring_info, mask_atom, local, mask_local, local_weight, local_distance], outputs=[out_energy, context, attn_local, attn_global, struc_rep, dense_embed])
+        inputs=inputs, outputs=[out_energy, context, attn_local, attn_global, struc_rep, dense_embed])
 
     model.summary()
     return model

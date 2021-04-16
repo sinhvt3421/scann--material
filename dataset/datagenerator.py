@@ -48,7 +48,7 @@ class DataIterator(object):
     def __init__(self, type, batch_size=32, nsample=0,
                  indices=None, data_neigh=None, data_energy=None,
                  data_ofm=None, use_ofm=False, mean=0.0, std=1.0,
-                 intensive=True, converter=True, datatype='M',
+                 intensive=True, converter=True, use_ring=False,
                  centers= np.linspace(0, 4, 20)):
         """
         Params:
@@ -69,7 +69,7 @@ class DataIterator(object):
         self.use_ofm = use_ofm
         if use_ofm:
             self.data_ofm = data_ofm
-        self.datatype = datatype
+        self.use_ring = use_ring
 
         self.mean = mean
         self.std = std
@@ -105,6 +105,7 @@ class DataIterator(object):
         return (target / n_atom - self.mean) / self.std
 
     def _get_batches_of_transformed_samples(self, idx: list) -> tuple:
+        m_len = []
         batch_nei = self.data_neigh[idx]
         batch_atom = self.engery[idx]
         if self.use_ofm:
@@ -120,11 +121,11 @@ class DataIterator(object):
         max_length = max(m_len)
         bs = len(batch_nei)
         
-        at = [p[0] for p in batch_atom]
+        at = [ [atomic_numbers[x] for x in p[0]] for p in batch_atom]
         energy = [self.transform(
             float(p[1]) * self.converter, len(p[0])) for p in batch_atom]
 
-        if self.datatype == 'M':
+        if self.use_ring:
             extra_info = [np.stack([p[2], p[3]], -1) for p in batch_atom]
 
 
@@ -157,7 +158,7 @@ class DataIterator(object):
         pad_atom = np.array(pad_sequences(
             at, padding='post', value=0), dtype='int32')
 
-        if self.datatype == 'M':
+        if self.use_ring:
             pad_extra = np.array(pad_sequences(
                 extra_info, padding='post', value=0), dtype='int32')
 
@@ -165,14 +166,14 @@ class DataIterator(object):
         mask_atom[pad_atom == 0] = 0
 
         inputs = {'atomic': pad_atom, 'mask_atom': np.expand_dims(mask_atom, -1),
-                  'locals': pad_local, 'mask_local': mask_local
+                  'locals': pad_local, 'mask_local': mask_local,
                   'local_weight': np.expand_dims(pad_local_weight, -1),
                   'local_distance': np.array(pad_local_distance)}
 
         if self.use_ofm:
             inputs['computed_ofm'] = pad_ofm
 
-        if self.datatype == 'M':
+        if self.use_ring:
             inputs['ring_aromatic'] = pad_extra
             
         return (inputs,

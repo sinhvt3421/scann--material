@@ -1,7 +1,7 @@
 from model.model_dam import create_model
 import numpy as np
 from sklearn.model_selection import train_test_split
-from dataset.datagenerator_latxb import DataIterator
+from dataset.datagenerator import DataIterator
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import r2_score, mean_absolute_error
 import tensorflow as tf
@@ -128,8 +128,12 @@ class CosineAnnealingScheduler(tf.keras.callbacks.Callback):
 
 
 def main(args):
+
     config = yaml.safe_load(open(args.dataset))
-    print('Create model')
+    config['model']['use_ofm'] = args.use_ofm
+    config['model']['use_ring'] = args.use_ring
+
+    print('Create model use ring ',args.use_ring,' use ofm ', args.use_ofm)
     model = create_model(config)
 
     print('Load data neighbors for dataset ', args.dataset)
@@ -141,23 +145,31 @@ def main(args):
 
     data_energy = []
     for d in data_full:
-        data_energy.append([d['Atomic'], d['Properties']
+        if args.use_ring:
+            data_energy.append([d['Atomic'], d['Properties']
                             [args.target], d['Ring'], d['Aromatic']])
+        else:
+            data_energy.append([d['Atomic'], d['Properties']
+                            [args.target]])
 
     data_energy = np.array(data_energy, dtype='object')
 
-    data_ofm_raw = pickle.load(open(
-        config['hyper']['data_ofm_path'], 'rb'))
-    struct_ofm = np.array(pickle.load(open(
-        config['hyper']['struct_ofm_path'], 'rb')))
-    # print(data_energy[0])
-    idx = ~np.all(struct_ofm == 0, axis=0)
-    data_ofm = []
-    for ofm in data_ofm_raw:
-        data_ofm.append(ofm[:, idx])
-    data_ofm = np.array(data_ofm)
+    
+    if config['model']['use_ofm']:
+        data_ofm_raw = pickle.load(open(
+            config['hyper']['data_ofm_path'], 'rb'))
+        struct_ofm = np.array(pickle.load(open(
+            config['hyper']['struct_ofm_path'], 'rb')))
+        # print(data_energy[0])
+        idx = ~np.all(struct_ofm == 0, axis=0)
+        data_ofm = []
+        for ofm in data_ofm_raw:
+            data_ofm.append(ofm[:, idx])
+        data_ofm = np.array(data_ofm)
+    else:
+        data_ofm = []
 
-    N_train = 100000
+    N_train = int(config['hyper']['data_size'] * 0.8)
     N_test = int(config['hyper']['data_size'] * 0.1)
     N_val = config['hyper']['data_size'] - N_train - N_test
 
@@ -176,39 +188,44 @@ def main(args):
     print(len(train), len(valid), len(test))
     histo = []
     train = DataIterator(type='train', batch_size=config['hyper']['batch_size'],
-                         indices=train, data_neigh=all_data, data_energy=data_energy, data_ofm=data_ofm, use_ofm=False, converter=True)
+                         indices=train, data_neigh=all_data,
+                         data_energy=data_energy, data_ofm=data_ofm,
+                         use_ofm=config['model']['use_ofm'], converter=True, use_ring=args.use_ring)
     # # mean, std = train.get_scaler()
     mean = 0
     std = 1
     print(mean, std)
     valid = DataIterator(type='valid', batch_size=config['hyper']['batch_size'],
-                         indices=valid, data_neigh=all_data, data_energy=data_energy, data_ofm=data_ofm, use_ofm=False, mean=mean, std=std, converter=True)
+                         indices=valid, data_neigh=all_data,
+                         data_energy=data_energy, data_ofm=data_ofm,
+                         use_ofm=config['model']['use_ofm'],
+                         mean=mean, std=std, converter=True,use_ring= args.use_ring)
 
     testIter = DataIterator(type='test', batch_size=config['hyper']['batch_size'],
-                            indices=test, data_neigh=all_data, data_energy=data_energy, data_ofm=data_ofm, use_ofm=False, mean=mean, std=std, converter=True)
+                            indices=test, data_neigh=all_data,
+                            data_energy=data_energy, data_ofm=data_ofm,
+                            use_ofm=config['model']['use_ofm'],
+                            mean=mean, std=std, converter=True,use_ring= args.use_ring)
 
     callbacks = []
-    if not os.path.exists(config['hyper']['save_path']):
-        os.makedirs(os.path.join(config['hyper']['save_path'], 'models/'))
+    if not os.path.exists(config['hyper']['save_path'] + '_' + args.target):
+        os.makedirs(os.path.join(config['hyper']['save_path'] + '_' + args.target, 'models/'))
 
     shutil.copy('model/model_dam.py',
-                config['hyper']['save_path'] + '/model_dam.py')
+                config['hyper']['save_path'] + '_' + args.target + '/model_dam.py')
 
-    callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(config['hyper']['save_path'],
+    callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(config['hyper']['save_path'] + '_' + args.target,
                                                                               'models/', "model-{epoch}.h5"),
                                                         monitor='val_mae', save_weights_only=True, verbose=1,
                                                         save_best_only=True))
 
-    # reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_mae',
-    #                                                  factor=config['hyper']['decay'],
-    #                                                  patience=5,  min_lr=1e-5, verbose=1)
+    
     tensorboard = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(
         config['hyper']['save_path']), profile_batch=0, embeddings_freq=100, histogram_freq=50)
 
     early_stop = tf.keras.callbacks.EarlyStopping(
         monitor='val_mae', patience=100)
 
-    # lr = CosineAnnealingScheduler(T_max=50,eta_max=config['hyper']['lr'],eta_min=1e-4)
     lr = SGDR(min_lr=config['hyper']['min_lr'], max_lr=config['hyper']
               ['lr'], base_epochs=50, mul_epochs=2)
     # callbacks.append(reduce_lr)
@@ -225,8 +242,7 @@ def main(args):
                      callbacks=callbacks,
                      validation_steps=valid.num_batch,
                      verbose=2)
-    # model.load_weights(os.path.join(
-    #     config['hyper']['save_path'], 'models/', "model-288.h5"))
+
     y_predict = []
     y = []
     idx = 0
@@ -249,5 +265,9 @@ if __name__ == "__main__":
     parser.add_argument('target', type=str,
                         help='Target energy for training')
     parser.add_argument('dataset',type=str,help='Path to dataset configs')
+    parser.add_argument('--use_ofm',type=bool,default=False,
+                        help='Whether to use ofm as extra embedding')
+    parser.add_argument('--use_ring',type=bool,default=False,
+                        help='Whether to use ring as extra emedding')
     args = parser.parse_args()
     main(args)

@@ -1,0 +1,22 @@
+model:
+  n_attention: 3
+  n_atoms: 10
+  n_embedding: 5
+  dense_embed: 25
+  dim_ofm: 25
+  v_dim: 25
+  num_head: 1
+  dim: 25
+  dense_out: 25
+  
+hyper:
+  batch_size: 64
+  test_size: 0.1
+  data_size: 6868
+  data_nei_path: 'preprocess/qm7_voroinn_neigh.npy'
+  data_energy_path: 'preprocess/qm7_energy.npy'
+  data_ofm_path: 'preprocess/ofm_local_reps_qm7.pickle'
+  struct_ofm_path: 'preprocess/ofm_struct_reps_qm7.pickle'
+  lr: 0.001
+  decay: 0.85
+  save_path: 'trained_models/model_qm7_test'

@@ -1,0 +1,20 @@
+model:
+  n_attention: 4
+  n_atoms: 118
+  n_embedding: 64
+  dense_embed: 128
+  dim_ofm: 128
+  v_dim: 256
+  num_head: 2
+  dim: 256
+  dense_out: 128
+  
+hyper:
+  batch_size: 64
+  test_size: 0.1
+  data_path: 'preprocess/latxb_cutoff.db'
+  lr: 0.0001
+  decay: 0.85
+  save_path: 'model_4'
+
+

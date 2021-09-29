@@ -1,0 +1,27 @@
+model:
+  n_attention: 12
+  n_atoms: 36
+  n_embedding: 64
+  dense_embed: 128
+  dim_ofm: 128
+  v_dim: 16
+  num_head: 8
+  dim: 16
+  dense_out: 128
+  n_bonds: 13
+  scale: 0.5
+hyper:
+  batch_size: 128
+  test_size: 0.1
+  data_size: 132480
+  # data_size: 10000
+  # data_nei_path: 'preprocess/qm9/qm9_voroinn_neigh_full_info_50k.npy'
+  data_nei_path: 'preprocess/qm9/qm9_voroinn_neigh_full_info_d25_w02.npy'
+  data_energy_path: 'preprocess/qm9/qm9_full_info_sdf.npy'
+  data_ofm_path: 'preprocess/qm9/ofm_rep/ofm_local_reps_qm9_50k.pickle'
+  struct_ofm_path: 'preprocess/qm9/ofm_rep/ofm_struct_reps_qm9_50k.pickle'
+  lr: 0.0005
+  min_lr: 0.00005
+  decay: 0.95
+  save_path: 'trained_models/model_qm9_ring_ev_mask_norm_scale_05_d25_w02_att12'
+  pretrained: 'trained_models/model_b3ylp_ring_ev_gap/models/model-353.h5'

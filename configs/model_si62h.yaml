@@ -1,0 +1,25 @@
+model:
+  n_attention: 8
+  n_atoms: 36
+  n_embedding: 64
+  dense_embed: 128
+  dim_ofm: 128
+  v_dim: 16
+  num_head: 8
+  dim: 16
+  dense_out: 128
+  n_bonds: 13
+  scale: 0.5
+hyper:
+  batch_size: 128
+  test_size: 0.1
+  data_size: 4482
+  data_nei_path: 'preprocess/Si62H/Si62H_voroinn_neigh_4k.npy'
+  data_energy_path: 'preprocess/Si62H/Si62H.npy'
+  data_ofm_path: 'preprocess/Si62H/ofm_rep/ofm_local_reps_Si62H_4k.pickle'
+  struct_ofm_path: 'preprocess/Si62H/ofm_rep/ofm_struct_reps_Si62H_4k.pickle'
+  lr: 0.0005
+  min_lr: 0.0001
+  decay: 0.95
+  save_path: 'trained_models/model_Si62H_norm_2'
+  pretrained: ''

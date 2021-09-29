@@ -1,0 +1,27 @@
+model:
+  n_attention: 3
+  n_atoms: 17
+  n_embedding: 128
+  dense_embed: 128
+  dim_ofm: 128
+  v_dim: 32
+  num_head: 4
+  dim: 32
+  dense_out: 128
+  
+hyper:
+  batch_size: 32
+  test_size: 0.1
+  data_size: 6868
+  # data_size: 50000
+  # data_nei_path: 'preprocess/qm7/qm7_voroinn_neigh_full_info_sdf.npy'
+  data_nei_path: 'preprocess/qm7/qm7_voroinn_neigh_full_info.npy'
+  # data_energy_path: 'preprocess/qm7/qm7_full_info_sdf.npy'
+  data_energy_path: 'preprocess/qm7/qm7_full_info.npy'
+
+  data_ofm_path: 'preprocess/qm7/ofm_rep/ofm_local_reps_qm7_6k8.pickle'
+  struct_ofm_path: 'preprocess/qm7/ofm_rep/ofm_struct_reps_qm7_6k8.pickle'
+  lr: 0.001
+  min_lr: 0.0001
+  decay: 0.95
+  save_path: 'trained_models/model_qm7_test'

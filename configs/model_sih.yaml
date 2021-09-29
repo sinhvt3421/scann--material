@@ -1,0 +1,25 @@
+model:
+  n_attention: 7
+  n_atoms: 15
+  n_embedding: 64
+  dense_embed: 128
+  dim_ofm: 128
+  v_dim: 16
+  num_head: 8
+  dim: 16
+  dense_out: 64
+  scale: 0.5
+hyper:
+  batch_size: 64
+  test_size: 0.1
+  data_size: 9936
+  data_nei_path: 'preprocess/sih/sih_voroinn_neigh_9k.npy'
+  data_energy_path: 'preprocess/sih/Si-H.npy'
+  data_ofm_path: 'preprocess/qm9/ofm_local_reps_qm9_50k.pickle'
+  struct_ofm_path: 'preprocess/qm9/ofm_struct_reps_qm9_50k.pickle'
+  lr: 0.001
+  decay: 0.95
+  min_lr: 0.0001
+  save_path: 'trained_models/model_sih_train_new'
+  datatype: 'C'
+  

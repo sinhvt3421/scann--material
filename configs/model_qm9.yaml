@@ -1,0 +1,23 @@
+model:
+  n_attention: 7
+  n_atoms: 11
+  n_embedding: 64
+  dense_embed: 128
+  dim_ofm: 128
+  v_dim: 16
+  num_head: 8
+  dim: 16
+  dense_out: 64
+  
+hyper:
+  batch_size: 64
+  test_size: 0.1
+  data_size: 133728
+  # data_size: 20000
+  data_nei_path: 'preprocess/qm9/qm9_voroinn_neigh_50k.npy'
+  data_energy_path: 'preprocess/qm9/qm9_gap_full.npy'
+  data_ofm_path: 'preprocess/qm9/ofm_local_reps_qm9_50k.pickle'
+  struct_ofm_path: 'preprocess/qm9/ofm_struct_reps_qm9_50k.pickle'
+  lr: 0.001
+  decay: 0.95
+  save_path: 'trained_models/model_qm9_gap_multiheads_2'

@@ -13,7 +13,7 @@ Please cite us as
 
 ## Experiments
 
-The code for experiments specific is placed in the folder [experiments]
+The code for experiments specific is placed in the folder [configs] (https://github.com/vts3497/material-dl/tree/master/configs)
 
 We provide an implementation for the crystal experiment, the QM9 experiments.
 

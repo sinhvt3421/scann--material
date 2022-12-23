@@ -12,15 +12,15 @@ model:
   scale: 0.5
   norm: True
 hyper:
-  batch_size: 128
+  batch_size: 64
   test_size: 0.1
-  data_size: 7218
-  data_nei_path: 'preprocess/ptcnt/pt_data_voroinn_neigh_7k.npy'
-  data_energy_path: 'preprocess/ptcnt/pt_full_info.npy'
+  data_size: 15545
+  data_nei_path: 'preprocess/ptcnt/pt_graphene_data_voroinn_neigh_15k_103.npy'
+  data_energy_path: 'preprocess/ptcnt/pt_graphene_full_info_au_15k.npy'
   data_ofm_path: 'preprocess/ptcnt/ofm_rep/ofm_local_reps_Si62H_4k.pickle'
   struct_ofm_path: 'preprocess/ptcnt/ofm_rep/ofm_struct_reps_Si62H_4k.pickle'
   lr: 0.0005
   min_lr: 0.0001
   decay: 0.95
-  save_path: 'trained_models/model_ptcnt_au_norm'
+  save_path: 'trained_models/model_ptcnt_au_graphene_15k_norm'
   pretrained: ''

@@ -1,5 +1,4 @@
-from model.model_dev import create_model
-# from trained_models.model_sih_train_gap.model_dam import create_model
+from model.model_new import create_model
 import numpy as np
 from sklearn.model_selection import train_test_split
 from dataset.datagenerator import DataIterator
@@ -144,10 +143,12 @@ def main(args):
         model.load_weights(config['hyper']['pretrained'])
 
     print('Load data neighbors for dataset ', args.dataset)
-    # all_data = np.load(config['hyper']['data_nei_path'], allow_pickle=True)
-    all_data = []
-    data_neigh = np.load(config['hyper']['data_nei_path'], allow_pickle=True)
-    all_data.extend(data_neigh)
+    all_data = np.load(config['hyper']['data_nei_path'], allow_pickle=True)
+    # all_data = []
+    # data_neigh = np.load(config['hyper']['data_nei_path'], allow_pickle=True)
+    # all_data.extend(data_neigh)
+    # data_neigh = np.load('preprocess/ptcnt/mix_pt_graphene_data_voroinn_neigh_12-14.npy', allow_pickle=True)
+    # all_data.extend(data_neigh)
 
     all_data = np.array(all_data, dtype='object')
     print('Load total data size: ', len(all_data))
@@ -158,17 +159,21 @@ def main(args):
 
     cut_off_id = []
     data_energy = []
+    if args.use_ref:
+        print('Using reference energy optimization')
     for i, d in enumerate(data_full):
         if args.use_ring:
-            # if len(d['Atomic']) <= 60 and ('S' in d['Atoms'] and 'F' in d['Atoms']):
-            # if len(d['Atomic']) <= 60:
             cut_off_id.append(i)
             data_energy.append([d['Atomic'], d['Properties']
                                 [args.target], d['Ring'], d['Aromatic']])
         else:
             cut_off_id.append(i)
-            data_energy.append([d['Atomic'], d['Properties']
-                                [args.target]])
+            if args.use_ref:
+                data_energy.append([d['Atomic'], d['Properties']
+                                [args.target]-d['Properties']['Ref_energy']])
+            else:
+                data_energy.append([d['Atomic'], d['Properties']
+                                    [args.target]])
     
     all_data = all_data[cut_off_id]
 
@@ -195,12 +200,6 @@ def main(args):
     data_perm = np.random.permutation(config['hyper']['data_size'])
     train, valid,test, extra =  np.split(data_perm, [N_train, N_train+N_val, N_train + N_val + N_test]) 
 
-    # N_train = 88537
-    # N_val = 9986
-    # N_test = 13199
-    # data_perm = np.random.permutation(N_train+N_val)
-    # train, valid, extra =  np.split(data_perm, [N_train, N_train+N_val])
-    # test = np.arange(N_train+N_val,int(config['hyper']['data_size']))
 
     assert(len(extra) == 0), 'Split was inexact {} {} {} {}'.format(
         len(train), len(valid), len(test), len(extra))
@@ -237,6 +236,8 @@ def main(args):
 
     shutil.copy('model/model_dev.py',
                 config['hyper']['save_path'] + '_' + args.target + '/model_dev.py')
+    shutil.copy('train.py',
+                    config['hyper']['save_path'] + '_' + args.target + '/train.py')
 
     callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(config['hyper']['save_path'] + '_' + args.target,
                                                                               'models/', "model-{epoch}.h5"),
@@ -250,7 +251,7 @@ def main(args):
         monitor='val_mae', patience=100)
 
     lr = SGDR(min_lr=config['hyper']['min_lr'], max_lr=config['hyper']
-              ['lr'], base_epochs=50, mul_epochs=2)
+              ['lr'], base_epochs=200, mul_epochs=2)
     # callbacks.append(reduce_lr)
     callbacks.append(lr)
     callbacks.append(early_stop)
@@ -296,6 +297,8 @@ if __name__ == "__main__":
                         help='Whether to use ring as extra emedding')
     parser.add_argument('--use_bonds', type=bool, default=False,
                         help='Whether to use bond type as extra emedding bonds')
+    parser.add_argument('--use_ref', type=bool, default=False,
+                    help='Whether to use ref optimization energy')
     parser.add_argument('--pretrained', type=bool, default=False,
                     help='Whether to use pretrained model')
     args = parser.parse_args()

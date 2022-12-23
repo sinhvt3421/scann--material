@@ -1,4 +1,4 @@
-from trained_models.model_qm9_ring_ev_mask_norm_scale_05_d40_w02_att10_lumo.model_dev import create_model_infer
+from trained_models.model_ptcnt_au_graphene_26k_norm_ref_total_energy.model_dev import create_model_infer
 # from model.model_latxb import create_model_infer
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -28,25 +28,26 @@ def schedule(epoch):
 
 def main(args):
     config = yaml.safe_load(
-        open('trained_models/model_qm9_ring_ev_mask_norm_scale_05_d40_w02_att10_lumo/config.yaml'))
+        open('trained_models/model_ptcnt_au_graphene_26k_norm_ref_total_energy/config.yaml'))
 
     model = create_model_infer(config)
     model.load_weights(
-        'trained_models/model_qm9_ring_ev_mask_norm_scale_05_d40_w02_att10_lumo/models/model-106.h5')
+        'trained_models/model_ptcnt_au_graphene_26k_norm_ref_total_energy/models/model-577.h5')
 
     print('Load data neighbors for dataset ')
-    # all_data = np.load(config['hyper']['data_nei_path'], allow_pickle=True)
-    all_data = []
-    data_neigh = np.load(config['hyper']['data_nei_path'], allow_pickle=True)
-    all_data.extend(data_neigh)
-    # all_data.extend(
-    #     np.load('preprocess/qm9/qm9_voroinn_neigh_full_info_50k-100k.npy', allow_pickle=True))
-    # all_data.extend(
-    #     np.load('preprocess/qm9/qm9_voroinn_neigh_full_info_100k.npy', allow_pickle=True))
+    all_data = np.load(config['hyper']['data_nei_path'], allow_pickle=True)
+    # all_data = []
+    # data_neigh = np.load('preprocess/ptcnt/no_pt_graphene_data_voroinn_neigh_1k8.npy', allow_pickle=True)
+    # data_neigh = np.load(config['hyper']['data_nei_path'], allow_pickle=True)
+    # all_data.extend(data_neigh)
+    # data_neigh = np.load('preprocess/ptcnt/mix_pt_graphene_optimization_data_voronoi_neigh_184.npy', allow_pickle=True)
+    # all_data.extend(data_neigh)
+
 
     all_data = np.array(all_data, dtype='object')
 
     print('Load data target: ', 'lumo')
+    # data_full = np.load('preprocess/ptcnt/mix_pt_graphene_optimization_184.npy', allow_pickle=True)
     data_full = np.load(
         config['hyper']['data_energy_path'], allow_pickle=True)
 
@@ -54,10 +55,10 @@ def main(args):
     for d in data_full:
         if args.use_ring:
             data_energy.append([d['Atomic'], d['Properties']
-                                ['lumo'], d['Ring'], d['Aromatic']])
+                                ['u0'], d['Ring'], d['Aromatic']])
         else:
             data_energy.append([d['Atomic'], d['Properties']
-                                ['lumo']])
+                                ['total_energy']])
 
     data_energy = np.array(data_energy, dtype='object')
 
@@ -80,7 +81,7 @@ def main(args):
     test = DataIterator(type='train', batch_size=config['hyper']['batch_size'],
                         indices=range(len(all_data)), data_neigh=all_data,
                         data_energy=data_energy, data_ofm=data_ofm,
-                        use_ofm=False, converter=True, use_ring=True)
+                        use_ofm=False, converter=True, use_ring=False)
 
     local_reps = []
     attn_atoms = []
@@ -88,35 +89,52 @@ def main(args):
     struct_reps = []
     struct_energy = []
     final_embed = []
-    for i in range(0, len(all_data), 32):
-        instance, op = test._get_batches_of_transformed_samples(
-            range(i, min(i+32,len(all_data))))
-        energy, context, attn_local, attn_global, struc_rep, dense_embed = model.predict(
+    # for i in range(0, len(all_data), 32):
+    #     instance, op = test._get_batches_of_transformed_samples(
+    #         range(i, min(i+32,len(all_data))))
+    #     energy, context, attn_local, attn_global, struc_rep, dense_embed = model.predict(
+    #         instance)
+    #     # energy, context, attn, struct,_     = model.predict(
+    #     #     instance)
+    #     local_reps.append(context)
+    #     struct_energy.append(energy)
+    #     attn_atoms.append(attn_global)
+    #     struct_reps.append(struc_rep)
+    #     final_embed.append(attn_local)
+    #     if i % 100 == 0:
+    #         print(i)
+
+    test_idx = [5436, 5948]
+    instance, op = test._get_batches_of_transformed_samples(test_idx)
+    print('Predict example')
+    energy, context, attn_local, attn_global, struc_rep, dense_embed = model.predict(
             instance)
         # energy, context, attn, struct,_     = model.predict(
         #     instance)
-        local_reps.append(context)
-        struct_energy.append(energy)
-        attn_atoms.append(attn_global)
-        struct_reps.append(struc_rep)
-        final_embed.append(attn_local)
-        if i % 100 == 0:
-            print(i)
+    local_reps.append(dense_embed)
+    struct_energy.append(energy)
+    attn_atoms.append(attn_global)
+    struct_reps.append(struc_rep)
+    final_embed.append(attn_local)
+
     # np.save('attn_atoms.npy',attn_atoms)
     pickle.dump(attn_atoms, open(
-        'trained_models/model_qm9_ring_ev_mask_norm_scale_05_d40_w02_att10_lumo/attn_score_full_lumo_106.pickle', 'wb'))
+        'trained_models/model_ptcnt_au_graphene_26k_norm_ref_total_energy/attn_score_au_norm_total_energy_5436-5948.pickle', 'wb'))
         
     # pickle.dump(struct_reps, open(
-    #     'trained_models/model_qm9_ring_ev_mask_norm_scale_05_d40_w02_att10_lumo/struct_reps_model_qm9_full_100.pickle', 'wb'))
+    #     'trained_models/model_ptcnt_au_graphene_26k_norm_ref_total_energy/struct_reps_model_qm9_full_100.pickle', 'wb'))
 
-    # pickle.dump(local_reps, open(
-    #     'trained_models/model_qm9_ring_ev_mask_norm_scale_05_d40_w02_att10_lumo/local_reps_model_qm9_full_100.pickle', 'wb'))
+    pickle.dump(local_reps, open(
+        'trained_models/model_ptcnt_au_graphene_26k_norm_ref_total_energy/local_reps_model_ptcnt_5436-5948.pickle', 'wb'))
 
-    pickle.dump(struct_energy, open(
-        'trained_models/model_qm9_ring_ev_mask_norm_scale_05_d40_w02_att10_lumo/energy_pre_model_qm9_full_lumo_106.pickle', 'wb'))
+    # pickle.dump(struct_energy, open(
+    #     'trained_models/model_ptcnt_au_graphene_26k_norm_ref_total_energy/energy_pre_model_pt_au_norm_total_energy_577_opt.pickle', 'wb'))
 
-    # pickle.dump(final_embed, open(
-    #     'trained_models/model_qm9_ring_ev_mask_norm_scale_05_d40_w02_att10_lumo/attn_agg_full_lumo_100.pickle', 'wb'))
+    pickle.dump(final_embed, open(
+        'trained_models/model_ptcnt_au_graphene_26k_norm_ref_total_energy/attn_agg_full_ptcnt_5436-5948.pickle', 'wb'))
+
+    np.save('trained_models/model_ptcnt_au_graphene_26k_norm_ref_total_energy/structure_neighbor_5436-5948.npy',all_data[test_idx])
+
 
 
 if __name__ == "__main__":

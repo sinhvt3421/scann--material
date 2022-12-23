@@ -2,8 +2,7 @@ import tensorflow as tf
 import numpy as np
 import tensorflow.keras.backend as K
 from tensorflow.keras import regularizers
-import tensorflow_addons as tfa
-tf.random.set_seed(3407)
+
 
 def root_mean_squared_error(y_true, y_pred):
     return tf.keras.backend.sqrt(tf.keras.backend.mean(tf.keras.backend.square(y_pred - y_true)))
@@ -53,11 +52,11 @@ class LocalAttention(tf.keras.layers.Layer):
 
         # Filter gaussian distance
         self.filter_dis = tf.keras.layers.Dense(
-            v_dim * num_head, name='filter_dis', activation='swish',
+            v_dim * num_head, name='filter_dis', activation=tf.keras.layers.LeakyReLU(alpha=0.0),
             kernel_regularizer=regularizers.l2(1e-4))
 
         # self.filter_dis = tf.keras.layers.Dense(
-        #     128, name='filter_dis', activation='swish',
+        #     128, name='filter_dis', activation=tf.keras.layers.LeakyReLU(alpha=0.0),
         #     kernel_regularizer=regularizers.l2(1e-4))
 
     def call(self, atom_query, atom_neighbor, local_distance, mask):
@@ -123,14 +122,13 @@ class LocalAttention(tf.keras.layers.Layer):
 
 class GlobalAttention(tf.keras.layers.Layer):
     def __init__(self, v_dim=16, dim=16,
-                 mode='dot', v_proj=True, scale=0.5, num_head=8, name='attn',norm=False):
+                 mode='dot', v_proj=True, scale=0.5, num_head=8, name='attn'):
         super(GlobalAttention, self).__init__(name)
 
         # Setup
         self.v_dim = v_dim
         self.dim = dim
         self.scale = scale
-        self.norm = norm
 
         # Linear proj. before attention
         self.proj_q = tf.keras.layers.Dense(
@@ -164,29 +162,22 @@ class GlobalAttention(tf.keras.layers.Layer):
         agg_attention = tf.reduce_sum(scaled_energy, -1)
         agg_attention = tf.reshape(
             agg_attention, [tf.shape(atom_query)[0], -1, 1])
-
         # agg_attention = self.transform_score(agg_attention)
         # agg_attention = tf.multiply(mask, agg_attention)
 
         # attn = tf.nn.softmax(agg_attention, 1)
-        if self.norm:
-            #Normalize score
-            agg_attention, _ = tf.linalg.normalize(
-                agg_attention, ord='euclidean', axis=1, name=None
-            )
-        
-        # agg_attention = scaled_energy
+        #Normalize score
+        # agg_attention, _ = tf.linalg.normalize(
+        #     agg_attention, ord='euclidean', axis=1, name=None
+        # )
         mask_scale = (1.0 - mask) * -1e9
         agg_attention += mask_scale
 
         attn = tf.nn.softmax(agg_attention, 1)
-        # attn = tf.nn.softmax(agg_attention, -1)
         # shape mask [bs, len_atom_centers, 1]
         # attn = tf.multiply(mask, attn)
 
         context = tf.reduce_sum(tf.multiply(attn,  self.proj_v(atom_query)), 1)
-        # context = tf.reduce_sum(tf.matmul(attn,  self.proj_v(atom_query)), 1)
-
 
         # value = tf.matmul(attn, query)
         # #Global score [bs, len_atom_centers, 1]
@@ -232,7 +223,7 @@ class DAMNet(tf.keras.models.Model):
         #                                              name='embed_bonds', dtype='float32')
 
         self.dense_embed = tf.keras.layers.Dense(config['dense_embed'],
-                                                 activation='swish', name='dense_embed',
+                                                 activation=tf.keras.layers.LeakyReLU(alpha=0.0), name='dense_embed',
                                                  dtype='float32')
         self.extra_embed = tf.keras.layers.Dense(
             10, name='extra_embed', dtype='float32')
@@ -245,15 +236,14 @@ class DAMNet(tf.keras.models.Model):
 
         # Dense layer before Global Attention
         self.dense_afterLc = tf.keras.layers.Dense(
-            config['dense_out'], activation='swish', name='after_Lc',
+            config['dense_out'], activation=tf.keras.layers.LeakyReLU(alpha=0.0), name='after_Lc',
             kernel_regularizer=regularizers.l2(1e-4))
 
         self.global_attention = GlobalAttention(name='attn_Gl', v_dim=config['v_dim'],
-                                                dim=config['dim'], num_head=config['num_head'],scale=config['scale'],
-                                                norm=config['norm'])
+                                                dim=config['dim'], num_head=config['num_head'],scale=config['scale'])
         # Dense layer on structure representation
         self.dense_bftotal = tf.keras.layers.Dense(
-            config['dense_out'], activation='swish', name='bf_property',
+            config['dense_out'], activation=tf.keras.layers.LeakyReLU(alpha=0.0), name='bf_property',
             kernel_regularizer=regularizers.l2(1e-4))
 
         self.predict_property = tf.keras.layers.Dense(
@@ -391,9 +381,8 @@ def create_model(config):
 
     model.summary()
     model.compile(loss=root_mean_squared_error,
-                 optimizer=tfa.optimizers.LAMB(config['hyper']['lr']),
-                #   optimizer=tf.keras.optimizers.Adam(config['hyper']['lr'],
-                #                                      decay=1e-5, clipnorm=100),
+                  optimizer=tf.keras.optimizers.Adam(config['hyper']['lr'],
+                                                     decay=1e-5, clipnorm=100),
                   metrics=['mae', coeff_determination])
     return model
 

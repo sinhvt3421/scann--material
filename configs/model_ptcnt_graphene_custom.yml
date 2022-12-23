@@ -1,0 +1,30 @@
+model:
+  n_attention: 10
+  n_atoms: 80
+  n_embedding: 64
+  dense_embed: 128
+  dim_ofm: 128
+  v_dim: 16
+  num_head: 8
+  dim: 16
+  dense_out: 128
+  n_bonds: 13
+  scale: 0.5
+  norm: True
+hyper:
+  batch_size: 64
+  test_size: 0.1
+  data_size: 21646
+  data_nei_path: 'preprocess/ptcnt/pt_graphene_data_voroinn_neigh_21k_1_11.npy'
+  data_energy_path: 'preprocess/ptcnt/mix_pt_graphene_full_info_26649_1-14.npy'
+  data_ofm_path: 'preprocess/ptcnt/ofm_rep/ofm_local_reps_Si62H_4k.pickle'
+  struct_ofm_path: 'preprocess/ptcnt/ofm_rep/ofm_struct_reps_Si62H_4k.pickle'
+  lr: 0.0005
+  min_lr: 0.0001
+  decay: 0.95
+  save_path: 'trained_models/model_ptcnt_au_graphene_26k_norm_ref'
+  # pretrained: 'trained_models/model_ptcnt_au_graphene_21k_norm_homo/models/model-697.h5'
+  # pretrained: 'trained_models/model_ptcnt_au_graphene_21k_norm_lumo/models/model-620.h5'
+  # pretrained: 'trained_models/model_ptcnt_au_graphene_26k_norm_total_energy/models/model-344.h5'
+
+  

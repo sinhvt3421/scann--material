@@ -21,5 +21,5 @@ hyper:
   lr: 0.0005
   min_lr: 0.0001
   decay: 0.95
-  save_path: 'trained_models/model_Si62H_norm_2'
+  save_path: 'trained_models/model_Si62H_norm_check'
   pretrained: ''

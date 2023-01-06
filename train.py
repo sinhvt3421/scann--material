@@ -1,6 +1,6 @@
 from model.model import create_model
 import numpy as np
-from dataset.datagenerator import DataIterator
+from utils.datagenerator import DataIterator
 from sklearn.metrics import r2_score, mean_absolute_error
 import tensorflow as tf
 import os

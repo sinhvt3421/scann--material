@@ -2,7 +2,7 @@ from trained_models.model_ptcnt_au_graphene_26k_norm_ref_total_energy.model_dev 
 # from model.model_latxb import create_model_infer
 import numpy as np
 from sklearn.model_selection import train_test_split
-from dataset.datagenerator import DataIterator
+from utils.datagenerator import DataIterator
 import tensorflow as tf
 import os
 from ase.db import connect

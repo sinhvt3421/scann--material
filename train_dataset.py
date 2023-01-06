@@ -1,7 +1,7 @@
 from model.model import create_model
 import numpy as np
 from sklearn.model_selection import train_test_split
-from dataset.datagenerator import DataIterator, create_dict
+from utils.datagenerator import DataIterator, create_dict
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import r2_score, mean_absolute_error
 import tensorflow as tf

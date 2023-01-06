@@ -78,7 +78,7 @@ class DataIterator(object):
 
         self.expand = GaussianDistance(centers)
 
-    def _get_batches_of_transformed_samples(self, idx: list) -> tuple:
+    def _get_batches_of_transformed_samples(self, idx) :
         m_len = []
         batch_nei = self.data_neighbor[idx]
         batch_atom = self.engery[idx]
@@ -171,9 +171,3 @@ class DataIterator(object):
             # wait([future])
             minibatch = future.result()
             yield minibatch
-
-def create_dict(atom, mask_atom, local, maks_local, weight, distance, ring, energy):
-    return  ({'atomic': atom, 'mask_atom': mask_atom,
-                  'locals': local, 'mask_local': maks_local,
-                  'local_weight': weight,
-                  'local_distance': distance,'ring_aromatic':ring}, {'dam_net': energy})

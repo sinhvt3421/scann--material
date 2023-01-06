@@ -1,38 +1,36 @@
 from model.model import create_model
+import tensorflow as tf
+from tensorflow.keras.callbacks import *
+from model.custom_layer import SGDR
+
 import numpy as np
 from utils.datagenerator import DataIterator
+from utils.general import *
+
 from sklearn.metrics import r2_score, mean_absolute_error
-import tensorflow as tf
 import os
 from ase.db import connect
 import yaml
 import shutil
-import pickle
-import math
+
 from ase.units import Hartree, eV
 import argparse
 import time
-from model.custom_layer import SGDR
-from utils.general import *
-
 
 def main(args):
-    a = time.time()
+    start = time.time()
     config = yaml.safe_load(open(args.dataset))
 
-    config['model']['use_ofm'] = args.use_ofm
     config['model']['use_ring'] = args.use_ring
-    config['model']['use_bonds'] = args.use_bonds
 
-    print('Create model use ring ', args.use_ring, ' use bonds ',
-          args.use_bonds, ' use ofm ', args.use_ofm)
+    print('Create model use ring information: ', args.use_ring)
 
     model = create_model(config,mode='train')
     if args.pretrained:
         print('load pretrained weight')
         model.load_weights(config['hyper']['pretrained'])
 
-    print('Load data for dataset ', args.dataset)
+    print('Load data for dataset: ', args.dataset)
     data_energy, data_neighbor = load_dataset(use_ref=args.use_ref,use_ring=args.use_ring,
                                              dataset=config['hyper']['data_energy_path'],
                                              dataset_neighbor=config['hyper']['data_nei_path'],
@@ -69,31 +67,27 @@ def main(args):
         os.makedirs(os.path.join(
             config['hyper']['save_path'] + '_' + args.target, 'models/'))
 
-    shutil.copy('model/model.py',
-                config['hyper']['save_path'] + '_' + args.target + '/model.py')
-    shutil.copy('train.py',
-                    config['hyper']['save_path'] + '_' + args.target + '/train.py')
-
     callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(config['hyper']['save_path'] + '_' + args.target,
-                                                                              'models/', "model-{epoch}.h5"),
+                                                                              'models/', "model.h5"),
                                                         monitor='val_mae', save_weights_only=True, verbose=1,
                                                         save_best_only=True))
-
-    tensorboard = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(
-        config['hyper']['save_path'] + '_' + args.target), profile_batch=0, embeddings_freq=0, histogram_freq=0)
 
     early_stop = tf.keras.callbacks.EarlyStopping(
         monitor='val_mae', patience=100)
 
     lr = SGDR(min_lr=config['hyper']['min_lr'], max_lr=config['hyper']
-              ['lr'], base_epochs=200, mul_epochs=2)
-    # callbacks.append(reduce_lr)
+              ['lr'], base_epochs=50, mul_epochs=2)
+
     callbacks.append(lr)
     callbacks.append(early_stop)
-    callbacks.append(tensorboard)
 
     yaml.safe_dump(config, open(config['hyper']['save_path'] + '_' + args.target + '/config.yaml', 'w'),
                    default_flow_style=False)
+
+    shutil.copy('model/model.py',
+                config['hyper']['save_path'] + '_' + args.target + '/model.py')
+    shutil.copy('train.py',
+                    config['hyper']['save_path'] + '_' + args.target + '/train.py')
 
     hist = model.fit(trainIter.iterator(), epochs=1000,
                      steps_per_epoch=trainIter.num_batch,
@@ -102,6 +96,12 @@ def main(args):
                      validation_steps=validIter.num_batch,
                      verbose=2, workers=1)
 
+    print('Training time: ', time.time()-start)
+
+    # Predict for testdata
+    print('Load best validation weight for predicting testset')
+    model.load_weights(os.path.join(config['hyper']['save_path'] + '_' + args.target,
+                        'models/','model.h5'))
 
     y_predict = []
     y = []
@@ -114,30 +114,28 @@ def main(args):
         y_predict.extend(list(np.squeeze(output)))
         idx += testIter.batch_size
 
-    print('prediction r2 score:', r2_score(y, y_predict),
-          ' and MAE:', mean_absolute_error(y, y_predict))
+    print('Prediction for testset r2 score: ', r2_score(y, y_predict),
+          ' and MAE: ', mean_absolute_error(y, y_predict))
 
-    save_data = [y_predict, test, hist.history]
+    save_data = [y_predict, y, test, hist.history]
+
     np.save(config['hyper']['save_path'] + '_' +
-            args.target + '/hist_data', save_data)
-
-    print('Training time: ', time.time()-a)
-
+            args.target + '/hist_data.npy', save_data)
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('target', type=str,
                         help='Target energy for training')
     parser.add_argument('dataset', type=str, help='Path to dataset configs')
-    parser.add_argument('--use_ofm', type=bool, default=False,
-                        help='Whether to use ofm as extra embedding')
+
     parser.add_argument('--use_ring', type=bool, default=False,
                         help='Whether to use ring as extra emedding')
-    parser.add_argument('--use_bonds', type=bool, default=False,
-                        help='Whether to use bond type as extra emedding bonds')
     parser.add_argument('--use_ref', type=bool, default=False,
                     help='Whether to use ref optimization energy')
+
     parser.add_argument('--pretrained', type=bool, default=False,
                     help='Whether to use pretrained model')
+                    
     args = parser.parse_args()
     main(args)

@@ -47,8 +47,8 @@ class DataIterator(object):
     """
 
     def __init__(self, type, batch_size=32, nsample=0,
-                 indices=None, data_neigh=None, data_energy=None,
-                 converter=True, use_ring=False, use_bonds=False,
+                 indices=None, data_neighbor=None, data_energy=None,
+                 converter=True, use_ring=False,
                  centers=np.linspace(0, 4, 20)):
         """
         Params:
@@ -64,47 +64,23 @@ class DataIterator(object):
         self.num_batch = ceil(self.n / self.batch_size)
         self.indices = indices
         self.shuffle = True if (type == 'train') else False
-        self.data_neigh = data_neigh
-        self.engery = data_energy
-        self.use_bonds = use_bonds
-        self.use_ring = use_ring
 
+        self.data_neighbor = data_neighbor
+        self.engery = data_energy
+    
+        self.use_ring = use_ring
         self.intensive = True
 
         if converter:
-            # self.converter = Hartree / eV * 1000
-            # self.converter = kcal/mol * 1000
             self.converter = 1000
         else:
             self.converter = 1.0
+
         self.expand = GaussianDistance(centers)
-
-    def get_scaler(self):
-        new_targets = []
-        atoms = []
-        for en in self.engery:
-            if self.intensive:
-                new_targets.append(float(en[1]) * self.converter)
-            else:
-                new_targets.append(float(en[1]) / len(en[0]) * self.converter)
-            atoms.append(en[0])
-
-        new_targets = np.array(new_targets, dtype='float32')
-        mean = np.mean(new_targets).item()
-        std = np.std(new_targets).item()
-
-        # self.mean = mean
-        # self.std = std
-        return mean, std
-
-    def transform(self, target, n_atom):
-        if self.intensive:
-            n_atom = 1
-        return (target / n_atom - self.mean) / self.std
 
     def _get_batches_of_transformed_samples(self, idx: list) -> tuple:
         m_len = []
-        batch_nei = self.data_neigh[idx]
+        batch_nei = self.data_neighbor[idx]
         batch_atom = self.engery[idx]
 
         for p in batch_nei:
@@ -114,11 +90,8 @@ class DataIterator(object):
         max_length = max(m_len)
         bs = len(batch_nei)
 
-        # at = [[atomic_numbers[x] for x in p[0]] for p in batch_atom]
         at = [p[0] for p in batch_atom]
-        # energy = [self.transform(
-        #     float(p[1]) * self.converter, len(p[0])) for p in batch_atom]
-        
+   
         energy = [float(p[1]) * self.converter for p in batch_atom]
 
         if self.use_ring:
@@ -129,10 +102,6 @@ class DataIterator(object):
 
         local_distance = [[self.expand.convert([float(n[3]) for n in lc])
                            for lc in p] for p in batch_nei]
-        if self.use_bonds:
-            local_bonds_type = [[[n[-1] for n in lc] for lc in p] for p in batch_nei]
-        # local_distance = [[[[n[3], n[4]] for n in lc]
-        #                    for lc in p] for p in batch_nei]
 
         # Padding neighbor for each atoms
         pad_local = [pad_sequences(
@@ -159,10 +128,6 @@ class DataIterator(object):
             pad_extra = np.array(pad_sequences(
                 extra_info, padding='post', value=0), dtype='int32')
 
-        if self.use_bonds:
-            pad_local_bonds_type = pad_sequences([pad_sequences(
-            lc, padding='post', dtype='int32', maxlen=max_length) for lc in local_bonds_type], padding='post', dtype='int32')
-
         mask_atom = np.ones_like(pad_atom)
         mask_atom[pad_atom == 0] = 0
 
@@ -175,13 +140,10 @@ class DataIterator(object):
         if self.use_ring:
             inputs['ring_aromatic'] = pad_extra
 
-        if self.use_bonds:
-            inputs['bonds_type'] = pad_local_bonds_type
-
         return (inputs,
-                {'dam_net': np.array(energy, dtype='float32')})
+                {'gam_net': np.array(energy, dtype='float32')})
 
-    def iterator_2(self):
+    def iterator(self):
         pool = ThreadPoolExecutor(self.n_jobs)
 
         while 1:
@@ -209,164 +171,6 @@ class DataIterator(object):
             # wait([future])
             minibatch = future.result()
             yield minibatch
-
-    def gen_data(self, idx):
-
-        idx = idx.numpy()
-
-        m_len = []
-        batch_nei = self.data_neigh[idx]
-        batch_atom = self.engery[idx]
-
-        for p in batch_nei:
-            for n in p:
-                m_len.append(len(n))
-
-        max_length = max(m_len)
-        bs = len(batch_nei)
-
-        # at = [[atomic_numbers[x] for x in p[0]] for p in batch_atom]
-        at = [p[0] for p in batch_atom]
-        energy = [self.transform(
-            float(p[1]) * self.converter, len(p[0])) for p in batch_atom]
-
-        if self.use_ring:
-            extra_info = [np.stack([p[2], p[3]], -1) for p in batch_atom]
-
-        local_neighbor = [[[n[2] for n in lc] for lc in p] for p in batch_nei]
-        local_weight = [[[n[1] for n in lc] for lc in p] for p in batch_nei]
-
-        local_distance = [[self.expand.convert([float(n[3]) for n in lc])
-                           for lc in p] for p in batch_nei]
-        if self.use_bonds:
-            local_bonds_type = [[[n[-1] for n in lc] for lc in p] for p in batch_nei]
-        # local_distance = [[[[n[3], n[4]] for n in lc]
-        #                    for lc in p] for p in batch_nei]
-
-        # Padding neighbor for each atoms
-        pad_local = [pad_sequences(
-            lc, padding='post', maxlen=max_length, value=1000) for lc in local_neighbor]
-        pad_local = pad_sequences(pad_local, padding='post', value=1000)
-
-        pad_local = np.array(pad_local, dtype=np.int32)
-
-        mask_local = np.ones_like(pad_local)
-        mask_local[pad_local == 1000] = 0
-        pad_local[pad_local == 1000] = 0
-
-        # Padding local weight and distance
-        pad_local_weight = pad_sequences([pad_sequences(
-            lc, padding='post', dtype='float32', maxlen=max_length) for lc in local_weight], padding='post', dtype='float32')
-        pad_local_distance = pad_sequences([pad_sequences(
-            lc, padding='post', dtype='float32', maxlen=max_length) for lc in local_distance], padding='post', dtype='float32')
-
-        # Padding atomic numbers of atom
-        pad_atom = np.array(pad_sequences(
-            at, padding='post', value=0), dtype='int32')
-
-        if self.use_ring:
-            pad_extra = np.array(pad_sequences(
-                extra_info, padding='post', value=0), dtype='int32')
-
-        if self.use_bonds:
-            pad_local_bonds_type = pad_sequences([pad_sequences(
-            lc, padding='post', dtype='int32', maxlen=max_length) for lc in local_bonds_type], padding='post', dtype='int32')
-
-        mask_atom = np.ones_like(pad_atom)
-        mask_atom[pad_atom == 0] = 0
-
-        inputs = [pad_atom, np.expand_dims(mask_atom, -1), pad_local, mask_local,
-                 np.expand_dims(pad_local_weight, -1),np.array(pad_local_distance)]
-
-        if self.use_ring:
-            inputs.append(pad_extra)
-
-        inputs.append(np.array(energy, dtype='float32'))
-
-        return  inputs
-
-    def gen_data_v2(self,idx):
-        idx = idx.numpy()
-
-        local_neighbor, local_weight, local_distance  = [], [], []
-        batch_nei = self.data_neigh[idx]
-        batch_atom = self.engery[idx]
-
-        m_len = []
-        for p in batch_nei:
-            for n in p:
-                m_len.append(len(n))
-
-        max_length = max(m_len)
-        
-        bs = len(batch_nei)
-
-        for p in batch_nei:
-            lc_nei = []
-            lc_wei = []
-            lc_dis = []
-            for lc in p:
-                nei = []
-                wei = []
-                dis = []
-                for n in lc:
-                    nei.append(n[2])
-                    wei.append(n[1])
-                    dis.append(float(n[3]))
-                lc_nei.append(nei)
-                lc_wei.append(wei)
-                lc_dis.append(self.expand.convert(dis))
-            
-            local_weight.append(pad_sequences(lc_wei, padding='post', dtype='float32', maxlen=max_length))
-            local_distance.append(pad_sequences(lc_dis, padding='post', dtype='float32', maxlen=max_length))
-
-            local_neighbor.append(pad_sequences(lc_nei, padding='post', maxlen=max_length, value=1000) )
-
-        # at = [[atomic_numbers[x] for x in p[0]] for p in batch_atom]
-        at = [p[0] for p in batch_atom]
-        energy = [self.transform(
-            float(p[1]) * self.converter, len(p[0])) for p in batch_atom]
-
-        if self.use_ring:
-            extra_info = [np.stack([p[2], p[3]], -1) for p in batch_atom]
-
-        if self.use_bonds:
-            local_bonds_type = [[[n[-1] for n in lc] for lc in p] for p in batch_nei]
-        # local_distance = [[[[n[3], n[4]] for n in lc]
-        #                    for lc in p] for p in batch_nei]
-
-        # Padding neighbor for each atoms
-        pad_local = pad_sequences(local_neighbor, padding='post', value=1000)
-        mask_local = np.ones_like(pad_local)
-        mask_local[pad_local == 1000] = 0
-        pad_local[pad_local == 1000] = 0
-
-        # Padding local weight and distance
-        pad_local_weight = pad_sequences(local_weight, padding='post', dtype='float32')
-        pad_local_distance = pad_sequences(local_distance, padding='post', dtype='float32')
-
-        # Padding atomic numbers of atom
-        pad_atom = pad_sequences(at, padding='post', value=0)
-
-        if self.use_ring:
-            pad_extra = pad_sequences(extra_info, padding='post', value=0)
-
-        if self.use_bonds:
-            pad_local_bonds_type = pad_sequences([pad_sequences(
-            lc, padding='post', dtype='int32', maxlen=max_length) for lc in local_bonds_type], padding='post', dtype='int32')
-
-        mask_atom = np.ones_like(pad_atom)
-        mask_atom[pad_atom == 0] = 0
-
-        inputs = [pad_atom, np.expand_dims(mask_atom, -1), pad_local, mask_local,
-                 np.expand_dims(pad_local_weight, -1),np.array(pad_local_distance)]
-
-        if self.use_ring:
-            inputs.append(pad_extra)
-
-        inputs.append(np.array(energy, dtype='float32'))
-
-        return  inputs
 
 def create_dict(atom, mask_atom, local, maks_local, weight, distance, ring, energy):
     return  ({'atomic': atom, 'mask_atom': mask_atom,

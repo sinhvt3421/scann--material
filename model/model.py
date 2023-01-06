@@ -2,215 +2,14 @@ import tensorflow as tf
 import numpy as np
 import tensorflow.keras.backend as K
 from tensorflow.keras import regularizers
-import tensorflow_addons as tfa
-
-
-def root_mean_squared_error(y_true, y_pred):
-    return tf.keras.backend.sqrt(tf.keras.backend.mean(tf.keras.backend.square(y_pred - y_true)))
-
-
-def mean_squared_error(y_true, y_pred):
-    return tf.keras.backend.mean(tf.keras.backend.square(y_pred - y_true))
-
-def r2_square(y_true, y_pred):
-    SS_res = K.sum(K.square(y_true-y_pred))
-    SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
-    return (1 - SS_res/(SS_tot + K.epsilon()))
-
-
-class LocalAttention(tf.keras.layers.Layer):
-
-    """
-    Implements a local attention block
-    """
-
-    def __init__(self, dim=16, num_head=8, v_proj=True, scale=0.5,
-                  name='LA_layer'):
-        super(LocalAttention, self).__init__(name)
-        """
-        Args:
-            dim:        Dimension of projection for query and key attention.
-            num_head:   Number of head attention use. Total dim will be dim * num_head
-            v_proj:     A Boolen for whether using value project or not
-            scale:      A scalar for normalization attention value (default to Transformer paper)
-        """
-
-        # Init hyperparameter
-        self.dim = dim
-        self.scale = scale
-        self.num_head = num_head
-
-        self.v_proj = v_proj
-
-        # Linear projection before attention
-        self.proj_q = tf.keras.layers.Dense(
-            dim * num_head, name='query', 
-            kernel_regularizer=regularizers.l2(1e-4))
-
-        self.proj_k = tf.keras.layers.Dense(
-            dim * num_head,  name='key', 
-            kernel_regularizer=regularizers.l2(1e-4))
-        
-        if self.v_proj:
-            self.proj_v = tf.keras.layers.Dense(
-                dim * num_head, name='value', 
-                kernel_regularizer=regularizers.l2(1e-4))
-
-        # Filter gaussian distance - Distance embedding
-        self.filter_dis = tf.keras.layers.Dense(
-            dim * num_head, name='filter_dis', activation='swish',
-            kernel_regularizer=regularizers.l2(1e-4))
-
-    def call(self, atom_query, atom_neighbor, local_distance, mask):
-        """
-        Args:
-            atom_query:     A tensor of size [batch_size, len_atom_centers, dim]. Center representation 
-                            for all local structure
-            atom_neighbor:  A tensor of size [batch_size,len_atom_centers, num_neighbors, dim].
-                            Representation for all neighbor of center atoms
-            local_distance: A tensor of size [batch_size, len_atom_centers, num_neighbors, 1]
-                            Distance from neighbor to center atoms 
-            mask:           A Boolen tensor for masking different number of neighbors for each center atoms
-        """
-
-        local_distance = self.filter_dis(local_distance)
-        atom_neighbor = atom_neighbor * local_distance
-
-        # Query centers atoms shape [bs, len_atom_centers, dim]
-        query = self.proj_q(atom_query)
-
-        # Key neighbor atoms shape [bs, len_atom_centers, num_neighbors, dim]
-        key = self.proj_k(atom_neighbor)
-
-        if self.v_proj:
-            value = self.proj_v(atom_neighbor)
-
-        sh = tf.shape(atom_neighbor)
-        bs = sh[0]
-        qlen = sh[1]
-        nlen = sh[2]
-        # shape query_t [bs, len_atom_centers, heads dim]
-        query_t = tf.reshape(query, [bs, -1, self.num_head, self.dim])
-
-        # shape key [bs, len_atom_centers, num_neighbors, heads dim]
-        key = tf.reshape(key, [bs, -1, nlen, self.num_head, self.dim])
-
-        value = tf.reshape(value, [bs, -1, nlen, self.num_head, self.dim])
-
-
-        # shape query_t [bs, len_atom_centers, heads, dim] * [bs, len_atom_centers, num_neighbors, heads, dim]
-        # shape energy [bs, heads, len_atom_centers, num_neighbors]
-        dk = tf.cast(tf.shape(key)[-1], tf.float32)**(-self.scale)
-        query_t = tf.multiply(query_t , dk)
-
-        energy = tf.einsum('bchd,bcnhd->bhcn', query_t, key)
-
-        # shape attn [bs, heads, len_atom_centers, num_neighbors] -> softmax over num_neighbors
-        mask_scaled = (1.0 - tf.expand_dims(mask, 1)) * -1e9
-        energy += mask_scaled
-        
-        attn = tf.nn.softmax(energy, -1)
-
-        if self.v_proj:
-            v = value
-        else:
-            v = key
-
-        context = tf.einsum('bcn, bcnhd -> bcnhd', mask, tf.einsum('bhcn, bcnhd -> bcnhd',attn,v))
-
-        context = tf.reshape(context, [bs, qlen, nlen, self.num_head * self.dim])
-
-        #Taking sum over weighted neighbor representation and query representation for center representation
-        context = tf.reduce_sum(context, 2) + query
-
-        return  attn, context
-
-
-class GlobalAttention(tf.keras.layers.Layer):
-
-    """
-    Implements a global attention block
-    """
-
-    def __init__(self,  dim=16, num_head=8, 
-                v_proj=True, scale=0.5,  norm=False, name='GA_layer'):
-        super(GlobalAttention, self).__init__(name)
-
-        # Setup
-        self.dim = dim
-        self.scale = scale
-        self.norm = norm
-
-        self.v_proj = v_proj
-
-        # Linear proj. before attention
-        self.proj_q = tf.keras.layers.Dense(
-            dim*num_head, name='query', kernel_regularizer=regularizers.l2(1e-4))
-
-        self.proj_k = tf.keras.layers.Dense(
-            dim*num_head,  name='key', kernel_regularizer=regularizers.l2(1e-4))
-
-        if self.v_proj:
-            self.proj_v = tf.keras.layers.Dense(
-                dim*num_head, name='value', kernel_regularizer=regularizers.l2(1e-4))
-
-
-    def call(self, atom_query, mask):
-        # Query centers atoms shape [bs, len_atom_centers, dim]
-        query = self.proj_q(atom_query)
-
-        # Key centers atoms shape [bs, len_atom_centers, dim]
-        key = self.proj_k(atom_query)
-
-        if self.v_proj:
-            value = self.proj_v(atom_query)
-
-        # shape energy [bs, len_atom_centers, len_atom_centers]
-        dk = tf.cast(tf.shape(key)[-1], tf.float32)**(-self.scale)
-        query = tf.multiply(query, dk)
-
-        energy = tf.einsum('bqd,bkd->bqk',query,key)
-        energy = tf.multiply(mask, energy)
-
-        # Taking the sum of attention from all local structures
-        # shape transform_energy [bs, len_atom_centers, 1]
-        agg_attention = tf.reduce_sum(energy, -1)
-        agg_attention = tf.reshape(
-            agg_attention, [tf.shape(atom_query)[0], -1, 1])
-
-        agg_attention = tf.multiply(mask, agg_attention)
-
-        # Normalize the score for better softmax behaviors
-        if self.norm:
-            #Normalize score
-            agg_attention, _ = tf.linalg.normalize(
-                agg_attention, ord='euclidean', axis=1, name=None
-            )
-
-        mask_scale = (1.0 - mask) * -1e9
-        agg_attention += mask_scale
-
-        attn = tf.nn.softmax(agg_attention, 1)
-    
-        if self.v_proj:
-            v = value
-        else:
-            v = key
-
-        # Multiply the attention score and local structure representation
-        context = tf.multiply(mask, tf.einsum('bqj,bqd -> bqd',attn,v))
-
-        context = tf.reduce_sum(context, 1)
-
-        return attn, context
-
+from custom_layer import *
 
 class GAMNet(tf.keras.models.Model):
     """
         Implements main GAMNet 
     """
 
-    def __init__(self, config, mean=0.0, std=1.0):
+    def __init__(self, config):
         """
             config:
             use_ring: Whether using extra ring information for molecule data
@@ -234,9 +33,6 @@ class GAMNet(tf.keras.models.Model):
 
         # Whether using normalization layer for local attention as in Transformer
         self.attn_norm = config['use_attn_norm']
-
-        self.mean = mean
-        self.std = std
 
         # Embeding for atomic number and other extra information as ring, aromatic,...
         self.embed_atom = tf.keras.layers.Embedding(config['n_atoms'],
@@ -382,7 +178,7 @@ class GAMNet(tf.keras.models.Model):
         struc_rep = self.dense_bftotal(struc_rep)
 
         # Shape predict_property [B, 1]
-        predict_property = self.predict_property(struc_rep) * self.std + self.mean
+        predict_property = self.predict_property(struc_rep)
 
         if train:
             return predict_property
@@ -390,7 +186,7 @@ class GAMNet(tf.keras.models.Model):
             return predict_property, attn_global
 
 
-def create_model(config, mean=0.0, std=1.0, mode='train'):
+def create_model(config, mode='train'):
 
     atomic = tf.keras.layers.Input(name='atomic', shape=(None,), dtype='int32')
     mask_atom = tf.keras.layers.Input(shape=[None, 1], name='mask_atom')
@@ -416,9 +212,9 @@ def create_model(config, mean=0.0, std=1.0, mode='train'):
         inputs = [atomic,  mask_atom, local,
                   mask_local, local_weight, local_distance]
 
-    if mode == 'train':
-        gammodel = GAMNet(config['model'], mean, std)
+    gammodel = GAMNet(config['model'])
 
+    if mode == 'train':
         out_energy = gammodel(inputs)
 
         model = tf.keras.Model(inputs=inputs, outputs=[out_energy])

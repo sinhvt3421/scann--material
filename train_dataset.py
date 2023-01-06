@@ -1,4 +1,4 @@
-from model.model_new import create_model
+from model.model import create_model
 import numpy as np
 from sklearn.model_selection import train_test_split
 from dataset.datagenerator import DataIterator, create_dict

@@ -8,11 +8,33 @@ from ase.db import connect
 import numpy as np
 from random import shuffle
 import tensorflow as tf
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 from .atomic_data import atomic_numbers
 from ase.units import Hartree, eV, kcal, mol
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
 RNG_SEED = 123
 logger = logging.getLogger(__name__)
+
+
+def pad_nested_sequences(sequences, max_len_1, max_len_2, dtype='int32', value=0):
+    """
+        Pad 3D array 
+    Args:
+        sequences (list): 3D array axis=(0,1,2)
+        max_len_1 (int): Max length inside axis = 2
+        max_len_2 (int): Max length outside axis = 1
+        dtype (str, optional):  Defaults to 'int32'.
+        value (int, optional): Padding value. Defaults to 0.
+
+    Returns:
+        np.ndarray: Padded sequences
+    """
+    pad_sq = [pad_sequences(
+        sq, padding='post', maxlen=max_len_1, value=value) for sq in sequences]
+    pad_sq = pad_sequences(pad_sq, padding='post',
+                           maxlen=max_len_2, value=value)
+    pad_sq = np.array(pad_sq, dtype=dtype)
+    return pad_sq
 
 
 class GaussianDistance():
@@ -46,28 +68,30 @@ class DataIterator(object):
     Create Data interator over dataset
     """
 
-    def __init__(self, type, batch_size=32, nsample=0,
-                 indices=None, data_neighbor=None, data_energy=None,
+    def __init__(self, data_energy, data_neighbor, indices, batch_size=32,
                  converter=True, use_ring=False,
                  centers=np.linspace(0, 4, 20)):
         """
-        Params:
-            intensive: Whether divide properties by number of atoms in a structure, default 1
-            converter: Whether to convert Ha to meV
-            type: train, valid, test
+        Args:
+            data_energy (list): _description_
+            data_neighbor (list): _description_
+            indices (dict): Index for train, valid, test
+            batch_size (int, optional): Defaults to 32.
+            converter (bool, optional): Scale target value. Defaults to True.
+            use_ring (bool, optional): Use ring aromatic information. Defaults to False.
+            centers (list, optional): Gaussian expand centers. Defaults to np.linspace(0, 4, 20).
         """
+
         self.batch_size = batch_size
         self.n_jobs = 2
-        self.type = type
 
-        self.n = len(indices)
-        self.num_batch = ceil(self.n / self.batch_size)
         self.indices = indices
-        self.shuffle = True if (type == 'train') else False
+        self.num_batch = {}
+        self.get_num_batch()
 
         self.data_neighbor = data_neighbor
-        self.engery = data_energy
-    
+        self.data_energy = data_energy
+
         self.use_ring = use_ring
         self.intensive = True
 
@@ -78,92 +102,95 @@ class DataIterator(object):
 
         self.expand = GaussianDistance(centers)
 
-    def _get_batches_of_transformed_samples(self, idx) :
-        m_len = []
+    def get_num_batch(self):
+        for type in self.indices:
+            self.num_batch[type] = ceil(
+                len(self.indices[type])/self.batch_size)
+
+    def get_batch(self, idx):
+        """
+            data_neighbor: [(site_x_label, nn['site_index'], w, d),...]
+            data_energy:   ['Atomic', 'Properties', 'Ring_info']
+        """
+        neighbor_len = []
+        center_len = []
+
         batch_nei = self.data_neighbor[idx]
-        batch_atom = self.engery[idx]
+        batch_atom = self.data_energy[idx]
 
-        for p in batch_nei:
-            for n in p:
-                m_len.append(len(n))
+        for c in batch_nei:
+            center_len.append(len(c))
+            for n in c:
+                neighbor_len.append(len(n))
 
-        max_length = max(m_len)
-        bs = len(batch_nei)
+        max_length_neighbor = max(neighbor_len)
+        max_length_center = max(center_len)
 
-        at = [p[0] for p in batch_atom]
-   
-        energy = [float(p[1]) * self.converter for p in batch_atom]
-
-        if self.use_ring:
-            extra_info = [np.stack([p[2], p[3]], -1) for p in batch_atom]
-
-        local_neighbor = [[[n[2] for n in lc] for lc in p] for p in batch_nei]
-        local_weight = [[[n[1] for n in lc] for lc in p] for p in batch_nei]
-
-        local_distance = [[self.expand.convert([float(n[3]) for n in lc])
-                           for lc in p] for p in batch_nei]
+        energy = np.array(
+            [float(p[1]) * self.converter for p in batch_atom], 'float32')
 
         # Padding neighbor for each atoms
-        pad_local = [pad_sequences(
-            lc, padding='post', maxlen=max_length, value=1000) for lc in local_neighbor]
-        pad_local = pad_sequences(pad_local, padding='post', value=1000)
-
-        pad_local = np.array(pad_local, dtype=np.int32)
-
-        mask_local = np.ones_like(pad_local)
-        mask_local[pad_local == 1000] = 0
+        local_neighbor = [[[n[1] for n in lc] for lc in p] for p in batch_nei]
+        pad_local = pad_nested_sequences(
+            local_neighbor, max_length_neighbor, max_length_center, value=1000, dtype='int32')
+        mask_local = (pad_local != 1000)
         pad_local[pad_local == 1000] = 0
 
         # Padding local weight and distance
-        pad_local_weight = pad_sequences([pad_sequences(
-            lc, padding='post', dtype='float32', maxlen=max_length) for lc in local_weight], padding='post', dtype='float32')
-        pad_local_distance = pad_sequences([pad_sequences(
-            lc, padding='post', dtype='float32', maxlen=max_length) for lc in local_distance], padding='post', dtype='float32')
+        local_weight = [[[n[2] for n in lc] for lc in p] for p in batch_nei]
+        local_distance = [[self.expand.convert([float(n[3]) for n in lc])
+                           for lc in p] for p in batch_nei]
+        pad_local_weight = pad_nested_sequences(
+            local_weight, max_length_neighbor, max_length_center, dtype='float32')
+
+        pad_local_distance = pad_nested_sequences(
+            local_distance, max_length_neighbor, max_length_center, dtype='float32')
 
         # Padding atomic numbers of atom
+        atomics = [center[0] for center in batch_atom]
         pad_atom = np.array(pad_sequences(
-            at, padding='post', value=0), dtype='int32')
+            atomics, padding='post', value=0), dtype='int32')
+
+        mask_atom = (pad_atom != 0)
 
         if self.use_ring:
+            extra_info = [np.stack([center[2], center[3]], -1)
+                          for center in batch_atom]
             pad_extra = np.array(pad_sequences(
                 extra_info, padding='post', value=0), dtype='int32')
-
-        mask_atom = np.ones_like(pad_atom)
-        mask_atom[pad_atom == 0] = 0
 
         inputs = {'atomic': pad_atom, 'mask_atom': np.expand_dims(mask_atom, -1),
                   'locals': pad_local, 'mask_local': mask_local,
                   'local_weight': np.expand_dims(pad_local_weight, -1),
-                  'local_distance': np.array(pad_local_distance)}
-
+                  'local_distance': pad_local_distance}
 
         if self.use_ring:
             inputs['ring_aromatic'] = pad_extra
 
-        return (inputs,
-                {'gam_net': np.array(energy, dtype='float32')})
+        return (inputs, energy)
 
-    def iterator(self):
+    def iterator(self, type):
+
         pool = ThreadPoolExecutor(self.n_jobs)
 
         while 1:
-            if self.shuffle:
-                shuffle(self.indices)
+            if type == 'train':
+                shuffle(self.indices[type])
             current_index = 0  # Run a single I/O thread in paralle
 
             current_index = self.batch_size
 
-            future = pool.submit(self._get_batches_of_transformed_samples,
-                                 self.indices[:self.batch_size])
+            future = pool.submit(self.get_batch,
+                                 self.indices[type][:self.batch_size])
 
             current_index = self.batch_size
-            for i in range(self.num_batch - 1):
+            for i in range(self.num_batch[type] - 1):
                 # wait([future])
                 minibatch = future.result()
                 # While the current minibatch is being consumed, prepare the next
-                future = pool.submit(self._get_batches_of_transformed_samples,
-                                     self.indices[current_index: current_index +
-                                                  self.batch_size],)
+                future = pool.submit(self.get_batch,
+                                     self.indices[type][current_index: current_index +
+                                                        self.batch_size],)
 
                 yield minibatch
                 current_index += self.batch_size

@@ -58,11 +58,20 @@ In our work, we have already built models for the QM9 data set. The model is pro
   * HOMO: Highest occupied molecular orbital energy
   * LUMO: Lowest unoccupied molecular orbital energy
   * Gap: energy gap
-  * ZPVE: zero point vibrational energy
   * α: isotropic polarizability
   * Cv: heat capacity at 298 K
 
 The MAEs on the various models are given below:
+
+### Performance of QM9 MEGNet-Simple models
+
+| Property | Units      | MAE   |
+|----------|------------|-------|
+| HOMO     | meV         | 51 |
+| LUMO     | meV         | 40 |
+| Gap      | meV         | 65 |
+| α        | Bohr^3     | 0.15|
+| Cv       | cal/(molK) | 0.059 |
 
 <a name="dataset"></a>
 

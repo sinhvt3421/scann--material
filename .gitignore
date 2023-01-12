@@ -130,3 +130,6 @@ dmypy.json
 .DS_Store
 .vscode
 .DS_Store
+
+#Data
+.processed_data/

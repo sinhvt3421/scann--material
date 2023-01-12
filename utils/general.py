@@ -2,11 +2,16 @@ import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-def split_data( test_size=0.1,len_data=None,):
+def split_data(len_data, test_size=0.1):
     """
-        Split data into train, valid, test
-        test_size: Default 0.1, 10% of data for testing
+        Split data training
+    Args:
+        len_data (int): Length of dataset.
+        test_size (float, optional): Percentage of data for testing. Defaults to 0.1.
+    Returns:
+        _type_: _description_
     """
+
     N_train = int(len_data * (1-test_size*2))
     N_test = int(len_data * test_size)
     N_val = len_data - N_train - N_test
@@ -16,9 +21,20 @@ def split_data( test_size=0.1,len_data=None,):
     return train, valid, test, extra
 
 
-def load_dataset(use_ref=False, use_ring=True,
-                 dataset=None, dataset_neighbor=None,
-                 target_prop=None):
+def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring=True):
+    """
+        Load dataset and neighbor information
+    Args:
+        dataset (str): Path to dataset
+        dataset_neighbor (str): Path to dataset neighbor
+        target_prop (str): Target property for training
+        use_ref (bool, optional): Use reference energy. Defaults to False.
+        use_ring (bool, optional): Use ring aromatic information. Defaults to True.
+
+    Returns:
+        data_energy (list)
+        data_neighbor (list)
+    """
 
     data_full = np.load(dataset, allow_pickle=True)
 
@@ -43,3 +59,4 @@ def load_dataset(use_ref=False, use_ring=True,
     data_neighbor = np.array(data_neighbor, dtype='object')
 
     return data_energy, data_neighbor
+

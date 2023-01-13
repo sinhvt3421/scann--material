@@ -1,7 +1,9 @@
 import tensorflow as tf
 import tensorflow.keras.backend as K
+from tensorflow.keras import regularizers
 import math
 import numpy as np
+
 
 class SGDR(tf.keras.callbacks.Callback):
     """This callback implements the learning rate schedule for
@@ -38,7 +40,7 @@ class SGDR(tf.keras.callbacks.Callback):
         self.max_lr = max_lr
         self.base_epochs = base_epochs
         self.mul_epochs = mul_epochs
- 
+
         self.cycles = 0.
         self.cycle_iterations = 0.
         self.trn_iterations = 0.
@@ -87,22 +89,25 @@ class SGDR(tf.keras.callbacks.Callback):
         else:
             tf.keras.backend.set_value(self.model.optimizer.lr, self.sgdr())
 
+
 class LocalAttention(tf.keras.layers.Layer):
-    
+
     """
     Implements a local attention block
     """
 
     def __init__(self, dim=16, num_head=8, v_proj=True, scale=0.5,
-                  name='LA_layer'):
-        super(LocalAttention, self).__init__(name)
-        """
+                 name='LA_layer'):
+        """_summary_
+
         Args:
-            dim:        Dimension of projection for query and key attention.
-            num_head:   Number of head attention use. Total dim will be dim * num_head
-            v_proj:     A Boolen for whether using value project or not
-            scale:      A scalar for normalization attention value (default to Transformer paper)
+            dim (int, optional): Dimension of projection for query and key attention. Defaults to 16.
+            num_head (int, optional): Number of head attention use. Total dim will be dim * num_head. Defaults to 8.
+            v_proj (bool, optional): A Boolen for whether using value project or not. Defaults to True.
+            scale (float, optional): A scalar for normalization attention value (default to Transformer paper). Defaults to 0.5.
+            name (str, optional):  Defaults to 'LA_layer'.
         """
+        super(LocalAttention, self).__init__(name)
 
         # Init hyperparameter
         self.dim = dim
@@ -113,16 +118,16 @@ class LocalAttention(tf.keras.layers.Layer):
 
         # Linear projection before attention
         self.proj_q = tf.keras.layers.Dense(
-            dim * num_head, name='query', 
+            dim * num_head, name='query',
             kernel_regularizer=regularizers.l2(1e-4))
 
         self.proj_k = tf.keras.layers.Dense(
-            dim * num_head,  name='key', 
+            dim * num_head,  name='key',
             kernel_regularizer=regularizers.l2(1e-4))
-        
+
         if self.v_proj:
             self.proj_v = tf.keras.layers.Dense(
-                dim * num_head, name='value', 
+                dim * num_head, name='value',
                 kernel_regularizer=regularizers.l2(1e-4))
 
         # Filter gaussian distance - Distance embedding
@@ -166,18 +171,17 @@ class LocalAttention(tf.keras.layers.Layer):
 
         value = tf.reshape(value, [bs, -1, nlen, self.num_head, self.dim])
 
-
         # shape query_t [bs, len_atom_centers, heads, dim] * [bs, len_atom_centers, num_neighbors, heads, dim]
         # shape energy [bs, heads, len_atom_centers, num_neighbors]
         dk = tf.cast(tf.shape(key)[-1], tf.float32)**(-self.scale)
-        query_t = tf.multiply(query_t , dk)
+        query_t = tf.multiply(query_t, dk)
 
         energy = tf.einsum('bchd,bcnhd->bhcn', query_t, key)
 
         # shape attn [bs, heads, len_atom_centers, num_neighbors] -> softmax over num_neighbors
         mask_scaled = (1.0 - tf.expand_dims(mask, 1)) * -1e9
         energy += mask_scaled
-        
+
         attn = tf.nn.softmax(energy, -1)
 
         if self.v_proj:
@@ -185,15 +189,16 @@ class LocalAttention(tf.keras.layers.Layer):
         else:
             v = key
 
-        context = tf.einsum('bcn, bcnhd -> bcnhd', mask, tf.einsum('bhcn, bcnhd -> bcnhd',attn,v))
+        context = tf.einsum('bcn, bcnhd -> bcnhd', mask,
+                            tf.einsum('bhcn, bcnhd -> bcnhd', attn, v))
 
-        context = tf.reshape(context, [bs, qlen, nlen, self.num_head * self.dim])
+        context = tf.reshape(
+            context, [bs, qlen, nlen, self.num_head * self.dim])
 
-        #Taking sum over weighted neighbor representation and query representation for center representation
+        # Taking sum over weighted neighbor representation and query representation for center representation
         context = tf.reduce_sum(context, 2) + query
 
-        return  attn, context
-
+        return attn, context
 
 
 class GlobalAttention(tf.keras.layers.Layer):
@@ -202,8 +207,18 @@ class GlobalAttention(tf.keras.layers.Layer):
     Implements a global attention block
     """
 
-    def __init__(self,  dim=16, num_head=8, 
-                v_proj=True, scale=0.5,  norm=False, name='GA_layer'):
+    def __init__(self,  dim=16, num_head=8,
+                 v_proj=True, scale=0.5,  norm=False, name='GA_layer'):
+        """
+
+        Args:
+            dim (int, optional): Dimension of projection for query and key attention. Defaults to 16.
+            num_head (int, optional): Number of head attention use. Total dim will be dim * num_head. Defaults to 8.
+            v_proj (bool, optional): A Boolen for whether using value project or not. Defaults to True.
+            scale (float, optional): A scalar for normalization attention value. Defaults to 0.5.
+            norm (bool, optional): A Boolen for whether using normalization for aggreation attention. Defaults to False.
+            name (str, optional):  Defaults to 'GA_layer'.
+        """
         super(GlobalAttention, self).__init__(name)
 
         # Setup
@@ -224,7 +239,6 @@ class GlobalAttention(tf.keras.layers.Layer):
             self.proj_v = tf.keras.layers.Dense(
                 dim*num_head, name='value', kernel_regularizer=regularizers.l2(1e-4))
 
-
     def call(self, atom_query, mask):
         # Query centers atoms shape [bs, len_atom_centers, dim]
         query = self.proj_q(atom_query)
@@ -239,7 +253,7 @@ class GlobalAttention(tf.keras.layers.Layer):
         dk = tf.cast(tf.shape(key)[-1], tf.float32)**(-self.scale)
         query = tf.multiply(query, dk)
 
-        energy = tf.einsum('bqd,bkd->bqk',query,key)
+        energy = tf.einsum('bqd,bkd->bqk', query, key)
         energy = tf.multiply(mask, energy)
 
         # Taking the sum of attention from all local structures
@@ -252,7 +266,7 @@ class GlobalAttention(tf.keras.layers.Layer):
 
         # Normalize the score for better softmax behaviors
         if self.norm:
-            #Normalize score
+            # Normalize score
             agg_attention, _ = tf.linalg.normalize(
                 agg_attention, ord='euclidean', axis=1, name=None
             )
@@ -261,14 +275,14 @@ class GlobalAttention(tf.keras.layers.Layer):
         agg_attention += mask_scale
 
         attn = tf.nn.softmax(agg_attention, 1)
-    
+
         if self.v_proj:
             v = value
         else:
             v = key
 
         # Multiply the attention score and local structure representation
-        context = tf.multiply(mask, tf.einsum('bqj,bqd -> bqd',attn,v))
+        context = tf.multiply(mask, tf.einsum('bqj,bqd -> bqd', attn, v))
 
         context = tf.reduce_sum(context, 1)
 
@@ -278,8 +292,10 @@ class GlobalAttention(tf.keras.layers.Layer):
 def root_mean_squared_error(y_true, y_pred):
     return tf.keras.backend.sqrt(tf.keras.backend.mean(tf.keras.backend.square(y_pred - y_true)))
 
+
 def mean_squared_error(y_true, y_pred):
     return tf.keras.backend.mean(tf.keras.backend.square(y_pred - y_true))
+
 
 def r2_square(y_true, y_pred):
     SS_res = K.sum(K.square(y_true-y_pred))

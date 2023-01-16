@@ -17,7 +17,7 @@ Please cite us as
 
 ```
 
-We developed a `Self-Consistent Atention-based Neural Network` that takes advantage of a neural network to quantitatively capture
+We developed a `Self-Consistent Atention-based Neural Network (SCANNet)` that takes advantage of a neural network to quantitatively capture
 the contribution of the local structure of material properties.
 
 The model captures information on atomic sites

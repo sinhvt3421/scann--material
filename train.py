@@ -1,7 +1,7 @@
-from model.model import create_model
+from model.SCANNet import create_model
 import tensorflow as tf
 from tensorflow.keras.callbacks import *
-from model.custom_layer import SGDR
+from model.custom_layer import SGDRC
 
 import numpy as np
 from utils.datagenerator import DataIterator
@@ -17,9 +17,12 @@ from ase.units import Hartree, eV
 import argparse
 import time
 
+seed = 2134
+tf.random.set_seed(seed)
+np.random.seed(seed)
 
 def main(args):
-    
+
     start = time.time()
     config = yaml.safe_load(open(args.dataset))
 
@@ -40,7 +43,7 @@ def main(args):
 
     config['hyper']['data_size'] = len(data_energy)
 
-    train, valid, test, extra = split_data(len_data=len(data_energy),
+    train, valid, test, extra = split_data(len_data=len(data_energy), 
                                            test_size=config['hyper']['test_size'])
 
     assert(len(extra) == 0), 'Split was inexact {} {} {} {}'.format(
@@ -56,11 +59,11 @@ def main(args):
                                data_energy=data_energy, converter=True,
                                use_ring=args.use_ring)
 
-    callbacks = []
     if not os.path.exists(config['hyper']['save_path'] + '_' + args.target):
         os.makedirs(os.path.join(
             config['hyper']['save_path'] + '_' + args.target, 'models/'))
 
+    callbacks = []
     callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(config['hyper']['save_path'] + '_' + args.target,
                                                                               'models/', "model.h5"),
                                                         monitor='val_mae',
@@ -70,8 +73,11 @@ def main(args):
     early_stop = tf.keras.callbacks.EarlyStopping(
         monitor='val_mae', patience=100)
 
-    lr = SGDR(min_lr=config['hyper']['min_lr'], max_lr=config['hyper']
-              ['lr'], base_epochs=50, mul_epochs=2)
+    # lr = SGDR(min_lr=config['hyper']['min_lr'],
+    #           max_lr=config['hyper']['lr'], base_epochs=50, mul_epochs=2)
+
+    lr = SGDRC(lr_min=config['hyper']['min_lr'],
+            lr_max=config['hyper']['lr'], t0=50, tmult=2)
 
     callbacks.append(lr)
     callbacks.append(early_stop)
@@ -79,8 +85,8 @@ def main(args):
     yaml.safe_dump(config, open(config['hyper']['save_path'] + '_' + args.target + '/config.yaml', 'w'),
                    default_flow_style=False)
 
-    shutil.copy('model/model.py',
-                config['hyper']['save_path'] + '_' + args.target + '/model.py')
+    shutil.copy('model/gamnet.py',
+                config['hyper']['save_path'] + '_' + args.target + '/gamnet.py')
     shutil.copy('train.py',
                 config['hyper']['save_path'] + '_' + args.target + '/train.py')
 
@@ -102,11 +108,10 @@ def main(args):
     y = []
     idx = 0
     for i in range(datasetIter.num_batch['test']):
-        inputs, target = datasetIter.get_batch(
-            test[idx:idx+datasetIter.batch_size])
+        inputs, target = datasetIter.get_batch(test[idx:idx+datasetIter.batch_size])
         output = model.predict(inputs)
 
-        y.extend(list(target['gam_net']))
+        y.extend(list(target))
         y_predict.extend(list(np.squeeze(output)))
 
         idx += datasetIter.batch_size
@@ -119,6 +124,13 @@ def main(args):
     np.save(config['hyper']['save_path'] + '_' +
             args.target + '/hist_data.npy', save_data)
 
+    with open(config['hyper']['save_path'] + '_' +
+            args.target + '/report.txt','w') as f:
+            f.write('Training MAE: ' + str(min(hist.history['mae'])) + '\n')
+            f.write('Val MAE: ' + str(min(hist.history['val_mae'])) + '\n')
+            f.write('Test MAE: ' + str(mean_absolute_error(y, y_predict)) + ', Test R2: ' + str(r2_score(y, y_predict)))
+
+    print('Saved model record for dataset')
 
 if __name__ == "__main__":
 

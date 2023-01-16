@@ -42,7 +42,7 @@ def compute_voronoi_neighbor(system_atoms,system_coord,lattice, d_thresh=4.0, w_
             w = nn['weight']
 
              # Filter atoms neighbors with high Voronoi weights: solid_angle/max(solid_angle)
-            if (w > w_thresh):
+            if (w > w_thresh) & (np.max(site_x.coords) < size):
                 d = np.sqrt(np.sum((site.coords - site_x.coords)**2))
 
                 # Filter atoms neighbors with small distance

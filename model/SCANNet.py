@@ -2,12 +2,12 @@ import tensorflow as tf
 import numpy as np
 import tensorflow.keras.backend as K
 from tensorflow.keras import regularizers
-from custom_layer import *
+from model.custom_layer import *
 
 
-class GAMNet(tf.keras.models.Model):
+class SCANNet(tf.keras.models.Model):
     """
-        Implements main GAMNet 
+        Implements main SCANNet 
     """
 
     def __init__(self, config):
@@ -26,7 +26,7 @@ class GAMNet(tf.keras.models.Model):
                     scale: attention scale factor, default to 0.5. 
         """
 
-        super(GAMNet, self).__init__()
+        super(SCANNet, self).__init__()
 
         # Number of attention layer
         self.n_attention = config['n_attention']
@@ -72,9 +72,9 @@ class GAMNet(tf.keras.models.Model):
                                                    kernel_regularizer=regularizers.l2(1e-4))
 
         # Global Attention layer
-        self.global_attention = GlobalAttention(name='GA_layer',
-                                                dim=config['dim'], num_head=config['num_head'], scale=config['scale'],
-                                                norm=config['use_norm'], softmax=config['softmax'])
+        self.global_attention = GlobalAttention(name='GA_layer', dim=config['dim'],
+                                                num_head=config['num_head'], scale=config['scale'],
+                                                norm=config['use_ga_norm'])
 
         # Dense layer on structure representation
         self.dense_bftotal = tf.keras.layers.Dense(
@@ -138,22 +138,22 @@ class GAMNet(tf.keras.models.Model):
                     neighbor_weight: Voronoi weight of each neighbor atoms for each center, size [B, M, N, 1]
                     neighbor_distance: Distance from each neighbor atoms to their center, size [B, M, N, 1]
         """
-        if self.mol:
+        if self.use_ring:
             centers, ring_info, center_mask, neighbor, neighbor_mask, neighbor_weight, neighbor_distance = inputs
         else:
             center_mask, center_mask, neighbor, neighbor_mask, neighbor_weight, neighbor_distance = inputs
 
         # Embedding atom and extra information as ring, aromatic
-        centers_embed = self.embed_atom(center_mask)
+        centers = self.embed_atom(centers)
 
         if self.use_ring:
             ring_embed = self.extra_embed(ring_info)
             # Shape embed_atom [B, M, n_embedding + 10]
-            centers_embed = tf.concat([centers_embed, ring_embed], -1)
+            centers = tf.concat([centers, ring_embed], -1)
 
-        centers_embed = self.dense_embed(centers_embed)
+        centers = self.dense_embed(centers)
 
-        centers = self.local_attention_loop(centers_embed, neighbor, neighbor_mask,
+        centers = self.local_attention_loop(centers, neighbor, neighbor_mask,
                                             neighbor_weight, neighbor_distance)
 
         # Dense layer after Local Attention -> representation for each local structure [B, M, d]
@@ -161,7 +161,8 @@ class GAMNet(tf.keras.models.Model):
 
         # Using weighted attention score for combining structures representation
         if global_attn:
-            attn_global, struc_rep = self.global_attention(centers, center_mask)
+            attn_global, struc_rep = self.global_attention(
+                centers, center_mask)
         else:
             struc_rep = tf.reduce_sum(centers * center_mask, axis=1)
 
@@ -207,14 +208,14 @@ def create_model(config, mode='train'):
         inputs = [atomic,  atom_mask, neighbor,
                   neighbor_mask, neighbor_weight, neighbor_distance]
 
-    gammodel = GAMNet(config['model'])
+    gammodel = SCANNet(config['model'])
 
     if mode == 'train':
         out_energy = gammodel(inputs)
 
         model = tf.keras.Model(inputs=inputs, outputs=[out_energy])
 
-        gammodel.summary()
+        model.summary()
         model.compile(loss=root_mean_squared_error,
                       optimizer=tf.keras.optimizers.Adam(
                           config['hyper']['lr'], clipnorm=10),

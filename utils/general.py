@@ -2,18 +2,24 @@ import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-def split_data(len_data, test_size=0.1):
+def split_data(len_data, test_percent=0.1, train_size=None, test_size=None):
     """
         Split data training
     Args:
         len_data (int): Length of dataset.
-        test_size (float, optional): Percentage of data for testing. Defaults to 0.1.
+        test_percent (float, optional): Percentage of data for testing. Defaults to 0.1.
+        train_size (int, optional): If provided, fix the number of train and test size
+        test_size (int, optional): If provided, fix the number of train and test size
     Returns:
         _type_: _description_
     """
-
-    N_train = int(len_data * (1-test_size*2))
-    N_test = int(len_data * test_size)
+    if train_size:
+        N_train = train_size
+        N_test = test_size
+    else:
+        N_train = int(len_data * (1-test_percent*2))
+        N_test = int(len_data * test_percent)
+        
     N_val = len_data - N_train - N_test
 
     data_perm = np.random.permutation(len_data)
@@ -41,6 +47,10 @@ def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring
     data_energy = []
     if use_ref:
         print('Using reference energy optimization')
+
+    if use_ring:
+        print('Using ring aromatic information')
+
 
     for i, d in enumerate(data_full):
         if use_ring:

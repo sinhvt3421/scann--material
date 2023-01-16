@@ -8,7 +8,6 @@ from ase.db import connect
 import numpy as np
 from random import shuffle
 import tensorflow as tf
-from .atomic_data import atomic_numbers
 from ase.units import Hartree, eV, kcal, mol
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
@@ -159,10 +158,10 @@ class DataIterator(object):
             pad_extra = np.array(pad_sequences(
                 extra_info, padding='post', value=0), dtype='int32')
 
-        inputs = {'atomic': pad_atom, 'mask_atom': np.expand_dims(mask_atom, -1),
-                  'locals': pad_local, 'mask_local': mask_local,
-                  'local_weight': np.expand_dims(pad_local_weight, -1),
-                  'local_distance': pad_local_distance}
+        inputs = {'atomic': pad_atom, 'atom_mask': np.expand_dims(mask_atom, -1),
+                  'neighbors': pad_local, 'neighbor_mask': mask_local,
+                  'neighbor_weight': np.expand_dims(pad_local_weight, -1),
+                  'neighbor_distance': pad_local_distance}
 
         if self.use_ring:
             inputs['ring_aromatic'] = pad_extra

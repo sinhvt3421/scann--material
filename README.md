@@ -1,7 +1,7 @@
 # Table of Contents
 
 * [Introduction](#introduction)
-* [DeepAttention Model](#DeepAt-framework)
+* [SCANNet Model](#DeepAt-framework)
 * [Usage](#usage)
 * [Datasets](#datasets)
 * [References](#references)
@@ -17,15 +17,14 @@ Please cite us as
 
 ```
 
-We developed an attention-based model that takes advantage of a neural network to quantitatively capture
+We developed a `Self-Consistent Atention-based Neural Network` that takes advantage of a neural network to quantitatively capture
 the contribution of the local structure of material properties.
 
 The model captures information on atomic sites
 and their local environments by considering self-consistent long-range interactions to enrich the structural
 representations of the materials. A comparative experiment was performed on benchmark dataset QM9 to compare
 the performance of the proposed model with state-of-the-art representations in terms of prediction accuracy
-for several target properties. The experimental comparison confirmed that the proposed model could predict
-several target properties of molecular and crystalline materials with reasonably high accuracy.
+for several target properties.
 
 Furthermore,
 the quantitative contribution of each local structure to the properties of the materials can help understand
@@ -33,7 +32,7 @@ the structural-property relationships of the materials.
 
 <a name="DeepAt-framework"></a>
 
-# GAMNet framework
+# SCANNet framework
 
 The Global Attention model Network (GAMNet) is an implementation of deep attention mechanism for materials science
 

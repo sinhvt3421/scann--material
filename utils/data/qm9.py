@@ -18,8 +18,8 @@ logging.getLogger("").setLevel(logging.CRITICAL)
 logging.disable(logging.CRITICAL)
 
 
-atomic_atom = {'1':'H','6':'C','7':'N','8':'O','9':'F','16':'S'}
-atom_atomic = {'H':1,'C':6,'N':7,'O':8,'F':9,'S':16}
+atomic_atom = {'1':'H','6':'C','7':'N','8':'O','9':'F'}
+atom_atomic = {'H':1,'C':6,'N':7,'O':8,'F':9}
 
 conversions = [1., 1., 1., 1., Bohr ** 3 / Ang ** 3,
                    Hartree / eV, Hartree / eV, Hartree / eV,
@@ -33,7 +33,7 @@ prop_names = ['rcA', 'rcB', 'rcC', 'mu', 'alpha', 'homo', 'lumo',
 
 def _load_evilmols():
     print("Downloading list of uncharacterized molecules...")
-    at_url = "https://ndownloader.figshare.com/files/3195404"
+    at_url = "https://springernature.figshare.com/ndownloader/files/3195404"
     tmpdir = tempfile.mkdtemp("gdb9")
     tmp_path = os.path.join(tmpdir, "uncharacterized.txt")
 
@@ -54,7 +54,7 @@ def process_qm9(dataset='qm9', save_path=''):
     tmpdir = tempfile.mkdtemp("gdb9")
     tar_path = os.path.join(tmpdir, "gdb9.tar.gz")
     raw_path = os.path.join(tmpdir, "gdb9_xyz")
-    url = "https://ndownloader.figshare.com/files/3195389"
+    url = "https://springernature.figshare.com/ndownloader/files/3195389"
 
     request.urlretrieve(url, tar_path)
     print("Done.")
@@ -99,59 +99,29 @@ def process_qm9(dataset='qm9', save_path=''):
                 for line in lines:
                     fout.write(line.replace('*^', 'e'))
         
-        atomic_symbols = []
-        coordinates = []
+        mol = next(pybel.readfile("xyz", tmp))
+        
+        atoms = [x.OBAtom for x in mol.atoms]
+        
+        atomics = [x.GetAtomicNum() for x in atoms]
+        atomic_symbols = [atomic_atom[str(x)] for x in atomics]
+        
+        ring_info = [1  if at.IsInRing() else 0 for at in atoms]
+        aromatic = [1  if at.IsAromatic() else 0 for at in atoms]
 
-        for line in lines[2:]:
-                l = line.split()
-                if len(l) == 5:
-                    atomic_symbols.append(l[0])
-                    coordinates.append(np.array([x.replace('*^', 'e') for x in l[1:4]],dtype='float32'))
-        coordinates = np.array(coordinates,dtype='float32')
+        coordinates = [[x.GetX(), x.GetY(), x.GetZ()] for x in atoms]
 
-        try:
-            mol = next(pybel.readfile("xyz", tmp))
-            smi = mol.write("sdf",os.path.join(tmpdir, "tmp.sdf"),overwrite=True)
-            new_mol = next(Chem.SDMolSupplier(os.path.join(tmpdir, "tmp.sdf"),True,False,False))
-            
-            atoms = new_mol.GetAtoms()
-
-            atomic_symbols_sdf = [a.GetSymbol() for a in atoms]
-
-            # Checking If the sdf reading doesn't change the order of atoms
-            assert atomic_symbols_sdf == atomic_symbols
-
-            ring_info = [1  if at.IsInRing() else 0 for at in atoms]
-            aromatic = [1  if at.GetIsAromatic() else 0 for at in atoms]
-            
-            atomics = [atom_atomic[x] for x in atomic_symbols]
-            
-            nstruct = {'id': idx, 'Properties': properties,
-                    'Atoms': atomic_symbols, 'Atomic':atomics, 
-                    'Coords': coordinates,
-                    'Ring': ring_info, 'Aromatic':aromatic, } 
-            all_struct.append(nstruct)
-            
-        except:
-            error += 1
-            
-            ring_info = [0 for at in atomic_symbols]
-            aromatic = [0 for at in atomic_symbols]
-            
-            atomics = [atom_atomic[x] for x in atomic_symbols]
-            nstruct = {'id': idx, 'Properties': properties,
-                    'Atoms': atomic_symbols, 'Atomic':atomics,
-                    'Coords': np.array(coordinates,dtype='float32'), 
-                    'Ring': ring_info, 'Aromatic':aromatic, } 
-            
-            all_struct.append(nstruct)
-
-    print('{0} files failed with rdkit Chem'.format(error))
+        nstruct = {'id': idx, 'Properties': properties,
+                'Atoms': atomic_symbols, 'Atomic':atomics,
+                'Coords': coordinates, 
+                'Ring': ring_info, 'Aromatic':aromatic, } 
+        
+        all_struct.append(nstruct)
 
     print("Saving file and removing temp dirs")
 
     dataset_file = os.path.join(save_path, dataset, dataset + '_data_energy.npy')
-    if not os.path.exists(save_path):
+    if not os.path.exists(os.path.join(save_path, dataset)):
         os.makedirs(os.path.join(save_path, dataset))
         
     np.save(dataset_file, all_struct)

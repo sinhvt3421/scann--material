@@ -11,7 +11,7 @@ def compute_voronoi_neighbor(system_atoms,system_coord,lattice, d_thresh=4.0, w_
         system_atoms (list): List of atoms name in the structure
         system_coord (list): 3D coordinates of all atoms in the structure
         lattice (list): Lattice information for crystal material
-        d_thresh (float, optional): Cut off threshold for distance. Defaults to 4.0.
+        d_thresh (float, optional): Cut off threshold for distance. Defaults to 4.0 A.
         w_thresh (float, optional): Cut off threshold for Voronoi weight. Defaults to 0.2.
 
     Returns:
@@ -42,7 +42,7 @@ def compute_voronoi_neighbor(system_atoms,system_coord,lattice, d_thresh=4.0, w_
             w = nn['weight']
 
              # Filter atoms neighbors with high Voronoi weights: solid_angle/max(solid_angle)
-            if (w > w_thresh) & (np.max(site_x.coords) < size):
+            if (w >= w_thresh) & (np.max(site_x.coords) < size):
                 d = np.sqrt(np.sum((site.coords - site_x.coords)**2))
 
                 # Filter atoms neighbors with small distance
@@ -54,7 +54,7 @@ def compute_voronoi_neighbor(system_atoms,system_coord,lattice, d_thresh=4.0, w_
 
     return local_xyz
 
-def parallel_compute_neighbor(dataset,savepath,
+def parallel_compute_neighbor(dataset_path,save_path,
                              d_t=4.0, w_t=0.2, pool=8):
     """
         Parallel compute Voronoi neighbors
@@ -67,11 +67,11 @@ def parallel_compute_neighbor(dataset,savepath,
         pool (int, optional): Parallel process for computing. Defaults to 8.
     """
 
-    dataset = np.load(dataset, allow_pickle=True)
+    dataset = np.load(dataset_path, allow_pickle=True)
 
     all_data = []
     future = []
-    print('Computing Voronoi neighbor for dataset ',dataset,' using ', pool,' parallel process')
+    print('Computing Voronoi neighbor for dataset ', dataset_path,' using ', pool,' parallel process')
     
     #Using multiprocess for faster computing, change the number process based on system capacity
     with ProcessPoolExecutor(pool) as excutor:
@@ -87,8 +87,8 @@ def parallel_compute_neighbor(dataset,savepath,
                 lattice = None
 
             future.append(excutor.submit(compute_voronoi_neighbor, 
-                                        d_t, w_t, 
-                                        system_atom, system_coord, lattice))
+                                        system_atom, system_coord, lattice, 
+                                        d_t, w_t))
             i += 1
             if i % 16 == 0:
                 for f in future:
@@ -100,8 +100,8 @@ def parallel_compute_neighbor(dataset,savepath,
             all_data.append(f.result())
         future.clear()
 
-    np.save(savepath, all_data)
-    print('Finished computing Voronoi neighbor for dataset ',dataset)
+    np.save(save_path, all_data)
+    print('Finished computing Voronoi neighbor for dataset ', dataset_path)
     
 # def main(args):
 #     """

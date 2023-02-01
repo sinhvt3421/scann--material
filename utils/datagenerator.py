@@ -1,18 +1,31 @@
-import json
-import logging
-import random
-from concurrent.futures import ThreadPoolExecutor, wait, as_completed
+import tensorflow as tf
+from tensorflow.keras.utils import Sequence
 from math import ceil
 import numpy as np
-from ase.db import connect
-import numpy as np
-from random import shuffle
-import tensorflow as tf
-from ase.units import Hartree, eV, kcal, mol
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-RNG_SEED = 123
-logger = logging.getLogger(__name__)
+SEED=2134
+np.random.seed(SEED)
+
+def pad_sequence(sequences, maxlen=None, dtype='int32', value=0, padding='post'):
+
+    num_samples = len(sequences)
+    sample_shape = ()
+
+    if maxlen is None:
+        lengths = []
+        for x in sequences:
+            lengths.append(len(x))
+        maxlen = np.max(lengths)
+
+    sample_shape = np.asarray(sequences[0]).shape[1:]
+
+    x = np.full((num_samples, maxlen) + sample_shape, value, dtype=dtype)
+
+    for idx, s in enumerate(sequences):
+        trunc = s[-maxlen:]
+        trunc = np.asarray(trunc, dtype=dtype)
+        x[idx, : len(trunc)] = trunc
+    return x
 
 
 def pad_nested_sequences(sequences, max_len_1, max_len_2, dtype='int32', value=0):
@@ -28,11 +41,10 @@ def pad_nested_sequences(sequences, max_len_1, max_len_2, dtype='int32', value=0
     Returns:
         np.ndarray: Padded sequences
     """
-    pad_sq = [pad_sequences(
-        sq, padding='post', maxlen=max_len_1, value=value) for sq in sequences]
-    pad_sq = pad_sequences(pad_sq, padding='post',
-                           maxlen=max_len_2, value=value)
-    pad_sq = np.array(pad_sq, dtype=dtype)
+    pad_sq = [pad_sequence(
+        sq, padding='post', maxlen=max_len_1, value=value,dtype=dtype) for sq in sequences]
+    pad_sq = pad_sequence(pad_sq, padding='post',
+                          maxlen=max_len_2, value=value,dtype=dtype)
     return pad_sq
 
 
@@ -62,14 +74,14 @@ class GaussianDistance():
         return np.exp(-((d[:, None] - self.centers[None, :]) ** 2) / self.width ** 2)
 
 
-class DataIterator(object):
+class DataIterator(Sequence):
     """
     Create Data interator over dataset
     """
 
-    def __init__(self, data_energy, data_neighbor, indices, batch_size=32,
+    def __init__(self, data_energy, data_neighbor, batch_size=32,
                  converter=True, use_ring=False,
-                 centers=np.linspace(0, 4, 20)):
+                 centers=np.linspace(0, 4, 20), shuffle=False):
         """
         Args:
             data_energy (list): _description_
@@ -82,12 +94,9 @@ class DataIterator(object):
         """
 
         self.batch_size = batch_size
-        self.n_jobs = 2
-
-        self.indices = indices
-        self.num_batch = {}
-        self.get_num_batch()
-
+        
+        self.shuffle = shuffle
+        
         self.data_neighbor = data_neighbor
         self.data_energy = data_energy
 
@@ -100,30 +109,32 @@ class DataIterator(object):
             self.converter = 1.0
 
         self.expand = GaussianDistance(centers)
+        self.on_epoch_end()
 
-    def get_num_batch(self):
-        for type in self.indices:
-            self.num_batch[type] = ceil(
-                len(self.indices[type])/self.batch_size)
+    def on_epoch_end(self):
+        self.indexes = np.arange(len(self.data_energy))
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+            
+    def __len__(self):
+        return ceil(len(self.data_energy) / self.batch_size)
+    
+    def __getitem__(self, idx):
+        indexes = self.indexes[idx*self.batch_size:(idx+1)*self.batch_size]
+        
+        batch_nei = self.data_neighbor[indexes]
+        batch_atom = self.data_energy[indexes]
 
-    def get_batch(self, idx):
-        """
-            data_neighbor: [(site_x_label, nn['site_index'], w, d),...]
-            data_energy:   ['Atomic', 'Properties', 'Ring_info']
-        """
         neighbor_len = []
         center_len = []
-
-        batch_nei = self.data_neighbor[idx]
-        batch_atom = self.data_energy[idx]
-
+        
         for c in batch_nei:
             center_len.append(len(c))
             for n in c:
                 neighbor_len.append(len(n))
 
-        max_length_neighbor = max(neighbor_len)
         max_length_center = max(center_len)
+        max_length_neighbor = max(neighbor_len)
 
         energy = np.array(
             [float(p[1]) * self.converter for p in batch_atom], 'float32')
@@ -147,16 +158,16 @@ class DataIterator(object):
 
         # Padding atomic numbers of atom
         atomics = [center[0] for center in batch_atom]
-        pad_atom = np.array(pad_sequences(
-            atomics, padding='post', value=0), dtype='int32')
+        pad_atom = pad_sequence(atomics, padding='post',
+                                maxlen=max_length_center, value=0, dtype='int32')
 
         mask_atom = (pad_atom != 0)
 
         if self.use_ring:
             extra_info = [np.stack([center[2], center[3]], -1)
                           for center in batch_atom]
-            pad_extra = np.array(pad_sequences(
-                extra_info, padding='post', value=0), dtype='int32')
+            pad_extra = pad_sequence(
+                extra_info, padding='post',maxlen=max_length_center, value=0, dtype='int32')
 
         inputs = {'atomic': pad_atom, 'atom_mask': np.expand_dims(mask_atom, -1),
                   'neighbors': pad_local, 'neighbor_mask': mask_local,
@@ -167,33 +178,5 @@ class DataIterator(object):
             inputs['ring_aromatic'] = pad_extra
 
         return (inputs, energy)
-
-    def iterator(self, type):
-
-        pool = ThreadPoolExecutor(self.n_jobs)
-
-        while 1:
-            if type == 'train':
-                shuffle(self.indices[type])
-            current_index = 0  # Run a single I/O thread in paralle
-
-            current_index = self.batch_size
-
-            future = pool.submit(self.get_batch,
-                                 self.indices[type][:self.batch_size])
-
-            current_index = self.batch_size
-            for i in range(self.num_batch[type] - 1):
-                # wait([future])
-                minibatch = future.result()
-                # While the current minibatch is being consumed, prepare the next
-                future = pool.submit(self.get_batch,
-                                     self.indices[type][current_index: current_index +
-                                                        self.batch_size],)
-
-                yield minibatch
-                current_index += self.batch_size
-            # Wait on the last minibatch
-            # wait([future])
-            minibatch = future.result()
-            yield minibatch
+    
+            

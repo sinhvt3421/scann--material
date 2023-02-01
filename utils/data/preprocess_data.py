@@ -5,20 +5,21 @@ from qm9 import process_qm9
 import argparse
 from voronoi_neighbor import parallel_compute_neighbor
 
-def init_dataset(dataset='qm9', save_path=''):
+
+def init_dataset(dataset='qm9', save_path='',d_t=4.0,w_t=0.2):
 
     if dataset == 'qm9':
-        process_qm9(dataset, save_path)
+        if not os.path.exists(os.path.join(save_path, dataset)):
+            process_qm9(dataset, save_path)
+        
+    parallel_compute_neighbor(dataset_path=os.path.join(save_path, dataset, dataset+'_data_energy.npy'),
+                              save_path=os.path.join(save_path, dataset, '{}_data_neighbor_dt{}_wt{}.npy'.format(dataset,d_t,w_t)),
+                              d_t=d_t,w_t=w_t)
 
-    
-    parallel_compute_neighbor(dataset=os.path.join(save_path,dataset,dataset+'_data_energy.npy'),
-                             savepath=os.path.join(save_path, dataset,dataset+'_data_neighbor.npy'))
 
 def main(args):
 
-    save_path = os.path.join(args.save_path, args.dataset)
-
-    init_dataset(args.dataset, args.file_name, save_path)
+    init_dataset(args.dataset, args.dataset_path,args.dt, args.wt)
 
 
 if __name__ == "__main__":
@@ -26,11 +27,14 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='qm9',
                         help='Target dataset')
 
-    parser.add_argument('--file_name', type=str, default='qm9_data_energy',
-                        help='Whether to use ring as extra emedding')
-
     parser.add_argument('--dataset_path', type=str, default='processed_data',
-                    help='Whether to use ref optimization energy')
-                    
+                        help='Whether to  processed data')
+
+    parser.add_argument('--dt', type=float, default=4.0,
+                        help='Cutoff distance')
+    
+    parser.add_argument('--wt', type=float, default=0.2,
+                        help='Cutoff weight')
+
     args = parser.parse_args()
     main(args)

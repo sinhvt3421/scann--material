@@ -2,6 +2,8 @@ import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 
+seed = 2134
+
 def split_data(len_data, test_percent=0.1, train_size=None, test_size=None):
     """
         Split data training
@@ -21,6 +23,8 @@ def split_data(len_data, test_percent=0.1, train_size=None, test_size=None):
         N_test = int(len_data * test_percent)
         
     N_val = len_data - N_train - N_test
+    
+    np.random.seed(seed)
 
     data_perm = np.random.permutation(len_data)
     train, valid, test, extra =  np.split(data_perm, [N_train, N_train+N_val, N_train + N_val + N_test]) 

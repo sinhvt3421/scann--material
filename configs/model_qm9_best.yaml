@@ -1,0 +1,22 @@
+model:
+  n_atoms: 36
+  embedding_dim: 48
+  n_attention: 7
+  local_dim: 64
+  num_head: 8
+  global_dim: 128
+  scale: 0.5
+  use_attn_norm: True
+  use_ga_norm: False
+hyper:
+  batch_size: 128
+  test_percent: 0.1
+  train_size: 110000
+  test_size: 10000
+  data_size: 130831
+  data_nei_path: 'processed_data/qm9/qm9_data_neighbor.npy'
+  data_energy_path: 'processed_data/qm9/qm9_data_energy.npy'
+  lr: 0.001
+  min_lr: 0.0001
+  decay: 0.95
+  save_path: 'trained_models/model_qm9_att7_best_tunner'

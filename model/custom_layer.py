@@ -4,6 +4,41 @@ from tensorflow.keras import regularizers
 import math
 import numpy as np
 
+seed = 2134
+tf.random.set_seed(seed)
+
+import tensorflow_probability as tfp
+
+
+class AutoClipper:
+    """
+        From paper: AutoClip: Adaptive Gradient Clipping
+        https://github.com/pseeth/autoclip
+    """
+    def __init__(self, clip_percentile, history_size=10000):
+        self.clip_percentile = clip_percentile
+        self.grad_history = tf.Variable(tf.zeros(history_size), trainable=False)
+        self.i = tf.Variable(0, trainable=False)
+        self.history_size = history_size
+
+    def __call__(self, grads_and_vars):
+        grad_norms = [self._get_grad_norm(g) for g, _ in grads_and_vars]
+        total_norm = tf.norm(grad_norms)
+        assign_idx = tf.math.mod(self.i, self.history_size)
+        self.grad_history = self.grad_history[assign_idx].assign(total_norm)
+        self.i = self.i.assign_add(1)
+        clip_value = tfp.stats.percentile(self.grad_history[: self.i], q=self.clip_percentile)
+        return [(tf.clip_by_norm(g, clip_value), v) for g, v in grads_and_vars]
+
+    def _get_grad_norm(self, t, axes=None, name=None):
+        values = tf.convert_to_tensor(t.values if isinstance(t, tf.IndexedSlices) else t, name="t")
+
+        # Calculate L2-norm, clip elements by ratio of clip_norm to L2-norm
+        l2sum = tf.math.reduce_sum(values * values, axes, keepdims=True)
+        pred = l2sum > 0
+        # Two-tap tf.where trick to bypass NaN gradients
+        l2sum_safe = tf.where(pred, l2sum, tf.ones_like(l2sum))
+        return tf.squeeze(tf.where(pred, tf.math.sqrt(l2sum_safe), l2sum))
 
 class SGDR(tf.keras.callbacks.Callback):
     """This callback implements the learning rate schedule for
@@ -163,7 +198,7 @@ class SGDRC(tf.keras.callbacks.Callback):
                 else:
                     self.lr_warmup_next = self.lr
         if self.show_lr:
-            print(f"epoch = {epoch+1}, sgdr_triggered = {self.triggered}, best_val_mae = {self.best_val_mae}, " + 
+            print(f"sgdr_triggered = {self.triggered}, " +
                   f"current_lr = {self.lr:f}, next_warmup_lr = {self.lr_warmup_next:f}, next_warmup = {self.ti-self.tcur}")
 
     # SGDR
@@ -184,13 +219,13 @@ class LocalAttention(tf.keras.layers.Layer):
     Implements a local attention block
     """
 
-    def __init__(self, dim=16, num_head=8, v_proj=True, scale=0.5,
+    def __init__(self, dim=128, num_head=8, v_proj=True, scale=0.5,activation='swish',
                  name='LA_layer'):
         """_summary_
 
         Args:
-            dim (int, optional): Dimension of projection for query and key attention. Defaults to 16.
-            num_head (int, optional): Number of head attention use. Total dim will be dim * num_head. Defaults to 8.
+            dim (int, optional): Dimension of projection for query and key attention. Defaults to 128.
+            num_head (int, optional): Number of head attention use. head dim will be dim // num_head. Defaults to 8.
             v_proj (bool, optional): A Boolen for whether using value project or not. Defaults to True.
             scale (float, optional): A scalar for normalization attention value (default to Transformer paper). Defaults to 0.5.
             name (str, optional):  Defaults to 'LA_layer'.
@@ -198,7 +233,7 @@ class LocalAttention(tf.keras.layers.Layer):
         super(LocalAttention, self).__init__()
 
         # Init hyperparameter
-        self.dim=dim
+        self.hdim = dim // num_head
         self.scale=scale
         self.num_head=num_head
 
@@ -206,21 +241,21 @@ class LocalAttention(tf.keras.layers.Layer):
 
         # Linear projection before attention
         self.proj_q=tf.keras.layers.Dense(
-            dim * num_head, name='query',
+            dim, name='query',
             kernel_regularizer=regularizers.l2(1e-4))
 
         self.proj_k=tf.keras.layers.Dense(
-            dim * num_head,  name='key',
+            dim,  name='key',
             kernel_regularizer=regularizers.l2(1e-4))
 
         if self.v_proj:
             self.proj_v=tf.keras.layers.Dense(
-                dim * num_head, name='value',
+                dim, name='value',
                 kernel_regularizer=regularizers.l2(1e-4))
 
         # Filter gaussian distance - Distance embedding
         self.filter_dis=tf.keras.layers.Dense(
-            dim * num_head, name='filter_dis', activation='swish',
+            dim , name='filter_dis', activation=activation,
             kernel_regularizer=regularizers.l2(1e-4))
 
     def call(self, atom_query, atom_neighbor, neighbor_distance, mask):
@@ -252,12 +287,12 @@ class LocalAttention(tf.keras.layers.Layer):
         qlen=sh[1]
         nlen=sh[2]
         # shape query_t [bs, len_atom_centers, heads dim]
-        query_t=tf.reshape(query, [bs, -1, self.num_head, self.dim])
+        query_t=tf.reshape(query, [bs, -1, self.num_head, self.hdim])
 
         # shape key [bs, len_atom_centers, num_neighbors, heads dim]
-        key=tf.reshape(key, [bs, -1, nlen, self.num_head, self.dim])
+        key=tf.reshape(key, [bs, -1, nlen, self.num_head, self.hdim])
 
-        value=tf.reshape(value, [bs, -1, nlen, self.num_head, self.dim])
+        value=tf.reshape(value, [bs, -1, nlen, self.num_head, self.hdim])
 
         # shape query_t [bs, len_atom_centers, heads, dim] * [bs, len_atom_centers, num_neighbors, heads, dim]
         # shape energy [bs, heads, len_atom_centers, num_neighbors]
@@ -281,7 +316,7 @@ class LocalAttention(tf.keras.layers.Layer):
                             tf.einsum('bhcn, bcnhd -> bcnhd', attn, v))
 
         context=tf.reshape(
-            context, [bs, qlen, nlen, self.num_head * self.dim])
+            context, [bs, qlen, nlen, self.num_head * self.hdim])
 
         # Taking sum over weighted neighbor representation and query representation for center representation
         context=tf.reduce_sum(context, 2) + query
@@ -295,8 +330,7 @@ class GlobalAttention(tf.keras.layers.Layer):
     Implements a global attention block
     """
 
-    def __init__(self,  dim=16, num_head=8,
-                 v_proj=True, scale=0.5,  norm=True, name='GA_layer'):
+    def __init__(self,  dim=128, v_proj=True, scale=0.5,  norm=True, name='GA_layer'):
         """
 
         Args:
@@ -318,14 +352,14 @@ class GlobalAttention(tf.keras.layers.Layer):
 
         # Linear proj. before attention
         self.proj_q=tf.keras.layers.Dense(
-            dim*num_head, name='query', kernel_regularizer=regularizers.l2(1e-4))
+            dim, name='query', kernel_regularizer=regularizers.l2(1e-4))
 
         self.proj_k=tf.keras.layers.Dense(
-            dim*num_head,  name='key', kernel_regularizer=regularizers.l2(1e-4))
+            dim,  name='key', kernel_regularizer=regularizers.l2(1e-4))
 
         if self.v_proj:
             self.proj_v=tf.keras.layers.Dense(
-                dim*num_head, name='value', kernel_regularizer=regularizers.l2(1e-4))
+                dim, name='value', kernel_regularizer=regularizers.l2(1e-4))
 
     def call(self, atom_query, mask):
         # Query centers atoms shape [bs, len_atom_centers, dim]
@@ -338,16 +372,23 @@ class GlobalAttention(tf.keras.layers.Layer):
             value=self.proj_v(atom_query)
 
         # shape energy [bs, len_atom_centers, len_atom_centers]
-        dk=tf.cast(tf.shape(key)[-1], tf.float32)**(-self.scale)
+        N = tf.cast(tf.shape(query)[1], tf.float32)
+        dk=tf.cast(tf.shape(key)[-1], tf.float32)**(-self.scale) / N
         query=tf.multiply(query, dk)
 
         energy=tf.einsum('bqd,bkd->bqk', query, key)
         energy=tf.multiply(mask, energy)
 
+        identity = tf.eye(tf.shape(energy)[1],batch_shape=[tf.shape(energy)[0]], dtype='bool')
+        mask_center = tf.cast(tf.math.logical_not(identity), tf.float32)
+
+        # Calculate attention from other atom except for the center
+        energy=tf.multiply(mask_center, energy)
+
         # Taking the sum of attention from all local structures
         # shape transform_energy [bs, len_atom_centers, 1]
-        agg_attention=tf.reduce_sum(energy, -1)
-        agg_attention=tf.reshape(
+        agg_attention= tf.reduce_sum(energy, -1)
+        agg_attention= tf.reshape(
             agg_attention, [tf.shape(atom_query)[0], -1, 1])
 
         agg_attention=tf.multiply(mask, agg_attention)

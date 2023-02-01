@@ -4,6 +4,9 @@ import tensorflow.keras.backend as K
 from tensorflow.keras import regularizers
 from model.custom_layer import *
 
+seed = 2134
+tf.random.set_seed(seed)
+
 
 class SCANNet(tf.keras.models.Model):
     """
@@ -39,24 +42,25 @@ class SCANNet(tf.keras.models.Model):
 
         # Embeding for atomic number and other extra information as ring, aromatic,...
         self.embed_atom = tf.keras.layers.Embedding(config['n_atoms'],
-                                                    config['n_embedding'],
+                                                    config['embedding_dim'],
                                                     name='embed_atom',
                                                     dtype='float32')
         if self.use_ring:
             self.extra_embed = tf.keras.layers.Dense(
                 10, name='extra_embed', dtype='float32')
 
-        self.dense_embed = tf.keras.layers.Dense(config['dense_embed'],
+        self.dense_embed = tf.keras.layers.Dense(config['local_dim'],
                                                  activation='swish', name='dense_embed',
                                                  dtype='float32')
 
         # L layers Local Attention
         self.local_attention = [LocalAttention(name='LA_layer_'+str(i),
-                                               dim=config['dim'], num_head=config['num_head'])
+                                               dim=config['local_dim'], num_head=config['num_head'],
+                                               activation='swish')
                                 for i in range(config['n_attention'])]
 
         if self.attn_norm:
-            self.forward_norm = [tf.keras.layers.Dense(config['dense_embed'],
+            self.forward_norm = [tf.keras.layers.Dense(config['local_dim'],
                                                        name='forward_trans' + str(i), dtype='float32',
                                                        kernel_regularizer=regularizers.l2(1e-4))
                                  for i in range(config['n_attention'])]
@@ -68,17 +72,17 @@ class SCANNet(tf.keras.models.Model):
                            for i in range(config['n_attention'])]
 
         # Dense layer before Global Attention
-        self.dense_afterLc = tf.keras.layers.Dense(config['dense_out'], activation='swish', name='after_Lc',
+        self.dense_afterLc = tf.keras.layers.Dense(config['global_dim'], activation='swish',
+                                                   name='after_Lc',
                                                    kernel_regularizer=regularizers.l2(1e-4))
 
         # Global Attention layer
-        self.global_attention = GlobalAttention(name='GA_layer', dim=config['dim'],
-                                                num_head=config['num_head'], scale=config['scale'],
+        self.global_attention = GlobalAttention(name='GA_layer', dim=config['global_dim'], scale=config['scale'],
                                                 norm=config['use_ga_norm'])
 
         # Dense layer on structure representation
         self.dense_bftotal = tf.keras.layers.Dense(
-            config['dense_out'], activation='swish', name='bf_property',
+            config['global_dim'], activation='swish', name='bf_property',
             kernel_regularizer=regularizers.l2(1e-4))
 
         # Output property
@@ -97,6 +101,7 @@ class SCANNet(tf.keras.models.Model):
         neighbor_indices = tf.concat(
             [range_B_t, tf.expand_dims(neighbor, -1)], -1)
 
+        list_context = []
         # Local Attention recursive layers
         for i in range(self.n_attention):
 
@@ -110,7 +115,6 @@ class SCANNet(tf.keras.models.Model):
             # Local attention for local structure representation
             attn_local, context = self.local_attention[i](centers, neighbor_weighted,
                                                           neighbor_distance,  neighbor_mask)
-
             if self.attn_norm:
                 # 2 Forward Norm layers
                 attention_norm = self.norm_1[i](context + centers)
@@ -121,7 +125,9 @@ class SCANNet(tf.keras.models.Model):
             else:
                 centers = context
 
-        return centers
+            list_context.append(centers)
+
+        return centers, list_context
 
     def call(self, inputs, train=True, global_attn=True):
         """     
@@ -139,9 +145,9 @@ class SCANNet(tf.keras.models.Model):
                     neighbor_distance: Distance from each neighbor atoms to their center, size [B, M, N, 1]
         """
         if self.use_ring:
-            centers, ring_info, center_mask, neighbor, neighbor_mask, neighbor_weight, neighbor_distance = inputs
+            centers, center_mask, neighbor, neighbor_mask, neighbor_weight, neighbor_distance, ring_info = inputs
         else:
-            center_mask, center_mask, neighbor, neighbor_mask, neighbor_weight, neighbor_distance = inputs
+            centers, center_mask, neighbor, neighbor_mask, neighbor_weight, neighbor_distance = inputs
 
         # Embedding atom and extra information as ring, aromatic
         centers = self.embed_atom(centers)
@@ -153,8 +159,8 @@ class SCANNet(tf.keras.models.Model):
 
         centers = self.dense_embed(centers)
 
-        centers = self.local_attention_loop(centers, neighbor, neighbor_mask,
-                                            neighbor_weight, neighbor_distance)
+        centers, list_center_rep = self.local_attention_loop(centers, neighbor, neighbor_mask,
+                                                             neighbor_weight, neighbor_distance)
 
         # Dense layer after Local Attention -> representation for each local structure [B, M, d]
         centers = self.dense_afterLc(centers)
@@ -177,7 +183,7 @@ class SCANNet(tf.keras.models.Model):
 
         else:
             if global_attn:
-                return predict_property, attn_global
+                return predict_property, attn_global, list_center_rep
             else:
                 return predict_property
 
@@ -194,6 +200,7 @@ def create_model(config, mode='train'):
 
     neighbor_weight = tf.keras.layers.Input(
         name='neighbor_weight', shape=(None, None, 1), dtype='float32')
+        
     neighbor_distance = tf.keras.layers.Input(
         name='neighbor_distance', shape=(None, None, 20), dtype='float32')
 
@@ -201,8 +208,8 @@ def create_model(config, mode='train'):
         ring_info = tf.keras.layers.Input(
             name='ring_aromatic', shape=(None, 2), dtype='float32')
 
-        inputs = [atomic, ring_info,  atom_mask, neighbor,
-                  neighbor_mask, neighbor_weight, neighbor_distance]
+        inputs = [atomic, atom_mask, neighbor, neighbor_mask,
+                  neighbor_weight, neighbor_distance, ring_info]
 
     else:
         inputs = [atomic,  atom_mask, neighbor,
@@ -215,17 +222,18 @@ def create_model(config, mode='train'):
 
         model = tf.keras.Model(inputs=inputs, outputs=[out_energy])
 
-        model.summary()
+        gammodel.summary()
         model.compile(loss=root_mean_squared_error,
-                      optimizer=tf.keras.optimizers.Adam(
-                          config['hyper']['lr'], clipnorm=10),
+                      optimizer=tf.keras.optimizers.Adam(config['hyper']['lr'],
+                                                         gradient_transformers=[AutoClipper(10)]),
                       metrics=['mae', r2_square])
 
     if mode == 'infer':
-        out_energy, attn_global = gammodel(inputs, train=False)
+        out_energy, attn_global, list_center_rep = gammodel(
+            inputs, train=False)
 
         model = tf.keras.Model(inputs=inputs, outputs=[
-                               out_energy, attn_global])
+                               out_energy, attn_global, list_center_rep])
         gammodel.summary()
 
     return model

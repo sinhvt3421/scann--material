@@ -21,12 +21,15 @@ seed = 2134
 tf.random.set_seed(seed)
 np.random.seed(seed)
 
+
 def main(args):
 
     start = time.time()
     config = yaml.safe_load(open(args.dataset))
 
     config['model']['use_ring'] = args.use_ring
+    config['hyper']['use_ref'] = args.use_ref
+    config['hyper']['target'] = args.target
 
     print('Create model use ring information: ', args.use_ring)
 
@@ -43,21 +46,30 @@ def main(args):
 
     config['hyper']['data_size'] = len(data_energy)
 
-    train, valid, test, extra = split_data(len_data=len(data_energy), 
+    train, valid, test, extra = split_data(len_data=len(data_energy), test_percent=config['hyper']['test_percent'],
+                                           train_size=config['hyper']['train_size'],
                                            test_size=config['hyper']['test_size'])
 
-    assert(len(extra) == 0), 'Split was inexact {} {} {} {}'.format(
+    assert (len(extra) == 0), 'Split was inexact {} {} {} {}'.format(
         len(train), len(valid), len(test), len(extra))
 
     print("Number of train data : ", len(train), " , Number of valid data: ", len(valid),
           " , Number of test data: ", len(test))
 
-    indices = {'train': train, 'valid': valid, 'test': test}
+    trainIter = DataIterator(batch_size=config['hyper']['batch_size'],
+                             data_neighbor=data_neighbor[train],
+                             data_energy=data_energy[train], converter=True,
+                             use_ring=args.use_ring, shuffle=True)
 
-    datasetIter = DataIterator(batch_size=config['hyper']['batch_size'],
-                               indices=indices, data_neighbor=data_neighbor,
-                               data_energy=data_energy, converter=True,
-                               use_ring=args.use_ring)
+    validIter = DataIterator(batch_size=config['hyper']['batch_size'],
+                             data_neighbor=data_neighbor[valid],
+                             data_energy=data_energy[valid], converter=True,
+                             use_ring=args.use_ring)
+
+    testIter = DataIterator(batch_size=config['hyper']['batch_size'],
+                            data_neighbor=data_neighbor[test],
+                            data_energy=data_energy[test], converter=True,
+                            use_ring=args.use_ring)
 
     if not os.path.exists(config['hyper']['save_path'] + '_' + args.target):
         os.makedirs(os.path.join(
@@ -71,31 +83,36 @@ def main(args):
                                                         save_best_only=True))
 
     early_stop = tf.keras.callbacks.EarlyStopping(
-        monitor='val_mae', patience=100)
+        monitor='val_mae', patience=50)
 
     # lr = SGDR(min_lr=config['hyper']['min_lr'],
     #           max_lr=config['hyper']['lr'], base_epochs=50, mul_epochs=2)
 
     lr = SGDRC(lr_min=config['hyper']['min_lr'],
-            lr_max=config['hyper']['lr'], t0=50, tmult=2)
+               lr_max=config['hyper']['lr'], t0=50, tmult=2,
+               lr_max_compression=1, trigger_val_mae=100)
+
+    sgdr = LearningRateScheduler(lr.lr_scheduler)
 
     callbacks.append(lr)
+    callbacks.append(sgdr)
     callbacks.append(early_stop)
 
     yaml.safe_dump(config, open(config['hyper']['save_path'] + '_' + args.target + '/config.yaml', 'w'),
                    default_flow_style=False)
 
-    shutil.copy('model/gamnet.py',
-                config['hyper']['save_path'] + '_' + args.target + '/gamnet.py')
+    shutil.copy('model/SCANNet.py',
+                config['hyper']['save_path'] + '_' + args.target + '/SCANNet.py')
     shutil.copy('train.py',
                 config['hyper']['save_path'] + '_' + args.target + '/train.py')
 
-    hist = model.fit(datasetIter.iterator('train'), epochs=1000,
-                     steps_per_epoch=datasetIter.num_batch['train'],
-                     validation_data=datasetIter.iterator('valid'),
-                     validation_steps=datasetIter.num_batch['valid'],
+    hist = model.fit(trainIter, epochs=1000,
+                     validation_data=validIter,
                      callbacks=callbacks,
-                     verbose=2)
+                     verbose=2,
+                     use_multiprocessing=True,
+                     shuffle=True,
+                     workers=4)
 
     print('Training time: ', time.time()-start)
 
@@ -106,15 +123,12 @@ def main(args):
 
     y_predict = []
     y = []
-    idx = 0
-    for i in range(datasetIter.num_batch['test']):
-        inputs, target = datasetIter.get_batch(test[idx:idx+datasetIter.batch_size])
+    for i in range(len(testIter)):
+        inputs, target = testIter.__getitem__(i)
         output = model.predict(inputs)
 
         y.extend(list(target))
         y_predict.extend(list(np.squeeze(output)))
-
-        idx += datasetIter.batch_size
 
     print('Result for testset: R2 score: ', r2_score(y, y_predict),
           ' and MAE: ', mean_absolute_error(y, y_predict))
@@ -125,12 +139,14 @@ def main(args):
             args.target + '/hist_data.npy', save_data)
 
     with open(config['hyper']['save_path'] + '_' +
-            args.target + '/report.txt','w') as f:
-            f.write('Training MAE: ' + str(min(hist.history['mae'])) + '\n')
-            f.write('Val MAE: ' + str(min(hist.history['val_mae'])) + '\n')
-            f.write('Test MAE: ' + str(mean_absolute_error(y, y_predict)) + ', Test R2: ' + str(r2_score(y, y_predict)))
+              args.target + '/report.txt', 'w') as f:
+        f.write('Training MAE: ' + str(min(hist.history['mae'])) + '\n')
+        f.write('Val MAE: ' + str(min(hist.history['val_mae'])) + '\n')
+        f.write('Test MAE: ' + str(mean_absolute_error(y, y_predict)) +
+                ', Test R2: ' + str(r2_score(y, y_predict)))
 
     print('Saved model record for dataset')
+
 
 if __name__ == "__main__":
 

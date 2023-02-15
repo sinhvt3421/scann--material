@@ -3,9 +3,6 @@ from tensorflow.keras.utils import Sequence
 from math import ceil
 import numpy as np
 
-SEED=2134
-np.random.seed(SEED)
-
 def pad_sequence(sequences, maxlen=None, dtype='int32', value=0, padding='post'):
 
     num_samples = len(sequences)
@@ -80,7 +77,7 @@ class DataIterator(Sequence):
     """
 
     def __init__(self, data_energy, data_neighbor, batch_size=32,
-                 converter=True, use_ring=False,
+                 converter=True, use_ring=False, use_hyp=False,
                  centers=np.linspace(0, 4, 20), shuffle=False):
         """
         Args:
@@ -101,6 +98,7 @@ class DataIterator(Sequence):
         self.data_energy = data_energy
 
         self.use_ring = use_ring
+        self.use_hyp = use_hyp
         self.intensive = True
 
         if converter:
@@ -120,8 +118,8 @@ class DataIterator(Sequence):
         return ceil(len(self.data_energy) / self.batch_size)
     
     def __getitem__(self, idx):
-        indexes = self.indexes[idx*self.batch_size:(idx+1)*self.batch_size]
         
+        indexes = self.indexes[idx*self.batch_size:(idx+1)*self.batch_size]
         batch_nei = self.data_neighbor[indexes]
         batch_atom = self.data_energy[indexes]
 
@@ -164,7 +162,11 @@ class DataIterator(Sequence):
         mask_atom = (pad_atom != 0)
 
         if self.use_ring:
-            extra_info = [np.stack([center[2], center[3]], -1)
+            if self.use_hyp:
+                extra_info = [np.stack([center[2], center[3], center[4], center[5]], -1)
+                          for center in batch_atom]
+            else:
+                extra_info = [np.stack([center[2], center[3]], -1)
                           for center in batch_atom]
             pad_extra = pad_sequence(
                 extra_info, padding='post',maxlen=max_length_center, value=0, dtype='int32')

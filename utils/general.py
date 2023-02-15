@@ -2,7 +2,6 @@ import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-seed = 2134
 
 def split_data(len_data, test_percent=0.1, train_size=None, test_size=None):
     """
@@ -21,17 +20,16 @@ def split_data(len_data, test_percent=0.1, train_size=None, test_size=None):
     else:
         N_train = int(len_data * (1-test_percent*2))
         N_test = int(len_data * test_percent)
-        
+
     N_val = len_data - N_train - N_test
-    
-    np.random.seed(seed)
 
     data_perm = np.random.permutation(len_data)
-    train, valid, test, extra =  np.split(data_perm, [N_train, N_train+N_val, N_train + N_val + N_test]) 
+    train, valid, test, extra = np.split(
+        data_perm, [N_train, N_train+N_val, N_train + N_val + N_test])
     return train, valid, test, extra
 
 
-def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring=True):
+def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring=True, use_hyp=False):
     """
         Load dataset and neighbor information
     Args:
@@ -55,14 +53,17 @@ def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring
     if use_ring:
         print('Using ring aromatic information')
 
-
     for i, d in enumerate(data_full):
         if use_ring:
-            data_energy.append([d['Atomic'], d['Properties'][target_prop], 
-                                d['Ring'], d['Aromatic']])
+            if use_hyp:
+                data_energy.append([d['Atomic'], d['Properties'][target_prop],
+                                    d['Ring'], d['Aromatic'], d['Acceptor'], d['Donor']])
+            else:
+                data_energy.append([d['Atomic'], d['Properties'][target_prop],
+                                    d['Ring'], d['Aromatic']])
         else:
             if use_ref:
-                data_energy.append([d['Atomic'], 
+                data_energy.append([d['Atomic'],
                                     d['Properties'][target_prop]-d['Properties']['Ref_energy']])
             else:
                 data_energy.append([d['Atomic'], d['Properties'][target_prop]])
@@ -73,4 +74,3 @@ def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring
     data_neighbor = np.array(data_neighbor, dtype='object')
 
     return data_energy, data_neighbor
-

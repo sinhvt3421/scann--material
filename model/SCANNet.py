@@ -3,9 +3,7 @@ import numpy as np
 import tensorflow.keras.backend as K
 from tensorflow.keras import regularizers
 from model.custom_layer import *
-
-seed = 2134
-tf.random.set_seed(seed)
+import tensorflow_addons as tfa
 
 
 class SCANNet(tf.keras.models.Model):
@@ -82,7 +80,7 @@ class SCANNet(tf.keras.models.Model):
 
         # Dense layer on structure representation
         self.dense_bftotal = tf.keras.layers.Dense(
-            config['global_dim'], activation='swish', name='bf_property',
+            config['dense_out'], activation='swish', name='bf_property',
             kernel_regularizer=regularizers.l2(1e-4))
 
         # Output property
@@ -200,16 +198,18 @@ def create_model(config, mode='train'):
 
     neighbor_weight = tf.keras.layers.Input(
         name='neighbor_weight', shape=(None, None, 1), dtype='float32')
-        
     neighbor_distance = tf.keras.layers.Input(
         name='neighbor_distance', shape=(None, None, 20), dtype='float32')
 
     if config['model']['use_ring']:
+        shape = 2
+        if config['model']['use_hyp']: shape=4
+        
         ring_info = tf.keras.layers.Input(
-            name='ring_aromatic', shape=(None, 2), dtype='float32')
+            name='ring_aromatic', shape=(None, shape), dtype='float32')
 
-        inputs = [atomic, atom_mask, neighbor, neighbor_mask,
-                  neighbor_weight, neighbor_distance, ring_info]
+        inputs = [atomic,  atom_mask, neighbor,
+                  neighbor_mask, neighbor_weight, neighbor_distance, ring_info]
 
     else:
         inputs = [atomic,  atom_mask, neighbor,
@@ -225,8 +225,8 @@ def create_model(config, mode='train'):
         gammodel.summary()
         model.compile(loss=root_mean_squared_error,
                       optimizer=tf.keras.optimizers.Adam(config['hyper']['lr'],
-                                                         gradient_transformers=[AutoClipper(10)]),
-                      metrics=['mae', r2_square])
+                                                     gradient_transformers=[AutoClipper(10)]),
+                    metrics=['mae', r2_square])
 
     if mode == 'infer':
         out_energy, attn_global, list_center_rep = gammodel(

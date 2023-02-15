@@ -18,18 +18,19 @@ logging.getLogger("").setLevel(logging.CRITICAL)
 logging.disable(logging.CRITICAL)
 
 
-atomic_atom = {'1':'H','6':'C','7':'N','8':'O','9':'F'}
-atom_atomic = {'H':1,'C':6,'N':7,'O':8,'F':9}
+atomic_atom = {'1': 'H', '6': 'C', '7': 'N', '8': 'O', '9': 'F'}
+atom_atomic = {'H': 1, 'C': 6, 'N': 7, 'O': 8, 'F': 9}
 
 conversions = [1., 1., 1., 1., Bohr ** 3 / Ang ** 3,
-                   Hartree / eV, Hartree / eV, Hartree / eV,
-                   Bohr ** 2 / Ang ** 2, Hartree / eV,
-                   Hartree / eV, Hartree / eV, Hartree / eV,
-                   Hartree / eV, 1.]
+               Hartree / eV, Hartree / eV, Hartree / eV,
+               Bohr ** 2 / Ang ** 2, Hartree / eV,
+               Hartree / eV, Hartree / eV, Hartree / eV,
+               Hartree / eV, 1.]
 
 prop_names = ['rcA', 'rcB', 'rcC', 'mu', 'alpha', 'homo', 'lumo',
               'gap', 'r2', 'zpve', 'energy_U0', 'energy_U', 'enthalpy_H',
               'free_G', 'Cv']
+
 
 def _load_evilmols():
     print("Downloading list of uncharacterized molecules...")
@@ -46,6 +47,7 @@ def _load_evilmols():
         for line in lines[9:-1]:
             evilmols.append(int(line.split()[0]))
     return np.array(evilmols)
+
 
 def process_qm9(dataset='qm9', save_path=''):
 
@@ -73,7 +75,7 @@ def process_qm9(dataset='qm9', save_path=''):
     # QM9 has 133,885 files
     irange = np.arange(len(ordered_files), dtype=np.int)
 
-    # Remove 3054 files with unstable geometric 
+    # Remove 3054 files with unstable geometric
     remove = _load_evilmols()
 
     irange = np.setdiff1d(irange, remove - 1)
@@ -82,13 +84,12 @@ def process_qm9(dataset='qm9', save_path=''):
     assert len(irange) == 130831
 
     all_struct = []
-    error = 0
     for idx in irange:
         if idx % 10000 == 0:
             print('Parse {:6d} / 130831 QM9 data'.format(idx+1))
 
         xyzfile = os.path.join(raw_path, ordered_files[idx])
-        properties={}
+        properties = {}
         tmp = os.path.join(tmpdir, "tmp.xyz")
         with open(xyzfile, 'r') as f:
             lines = f.readlines()
@@ -98,32 +99,43 @@ def process_qm9(dataset='qm9', save_path=''):
             with open(tmp, "wt") as fout:
                 for line in lines:
                     fout.write(line.replace('*^', 'e'))
-        
+
         mol = next(pybel.readfile("xyz", tmp))
-        
+
         atoms = [x.OBAtom for x in mol.atoms]
-        
+        coordinates = np.array([x.coords for x in mol.atoms],dtype='float32')
+
         atomics = [x.GetAtomicNum() for x in atoms]
         atomic_symbols = [atomic_atom[str(x)] for x in atomics]
-        
-        ring_info = [1  if at.IsInRing() else 0 for at in atoms]
-        aromatic = [1  if at.IsAromatic() else 0 for at in atoms]
 
-        coordinates = [[x.GetX(), x.GetY(), x.GetZ()] for x in atoms]
+        ring_info = [1 if at.IsInRing() else 0 for at in atoms]
+        aromatic = [1 if at.IsAromatic() else 0 for at in atoms]
+        
+        acceptor = [1 if at.IsHbondAcceptor() else 0 for at in atoms]
+        donor_b = []
+        for i, at in enumerate(mol.atoms):
+            if at.type == 'H':
+                donor_b.append(atoms[i].IsHbondDonorH())
+            else:
+                donor_b.append(atoms[i].IsHbondDonor())
+
+        donor = [1 if at else 0 for at in donor_b]
 
         nstruct = {'id': idx, 'Properties': properties,
-                'Atoms': atomic_symbols, 'Atomic':atomics,
-                'Coords': coordinates, 
-                'Ring': ring_info, 'Aromatic':aromatic, } 
-        
+                   'Atoms': atomic_symbols, 'Atomic': atomics,
+                   'Coords': coordinates, 'Ring': ring_info,
+                   'Aromatic': aromatic, 
+                   'Acceptor':acceptor, 'Donor':donor}
+
         all_struct.append(nstruct)
 
     print("Saving file and removing temp dirs")
 
-    dataset_file = os.path.join(save_path, dataset, dataset + '_data_energy.npy')
+    dataset_file = os.path.join(
+        save_path, dataset, dataset + '_data_energy.npy')
     if not os.path.exists(os.path.join(save_path, dataset)):
         os.makedirs(os.path.join(save_path, dataset))
-        
+
     np.save(dataset_file, all_struct)
 
     shutil.rmtree(tmpdir, ignore_errors=True)

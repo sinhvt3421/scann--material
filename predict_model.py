@@ -1,4 +1,5 @@
 from model.SCANNet import create_model
+# from trained_models.model_qm9_att7_s3421_1e3_1e4_ga_nnorm_clip_2022_avg_homo.SCANNet import create_model
 import numpy as np
 from utils.datagenerator import DataIterator
 from utils.general import *
@@ -21,10 +22,9 @@ def main(args):
                                               dataset_neighbor=config['hyper']['data_nei_path'],
                                               target_prop=config['hyper']['target'])
 
-    infer = range(0, 100000)
-    indices={'infer': infer}
+    infer = range(0, 45000)
     datasetIter = DataIterator(batch_size=config['hyper']['batch_size'],
-                                indices=indices, data_neighbor=data_neighbor,
+                                data_neighbor=data_neighbor,
                                 data_energy=data_energy, converter=True,
                                 use_ring=config['model']['use_ring'])
 
@@ -33,9 +33,10 @@ def main(args):
     struct_energy = []
 
     idx = 0
-    for i in range(datasetIter.num_batch['infer']):
-        inputs, target = datasetIter.get_batch(infer[idx:idx+datasetIter.batch_size])
+    for i in range(len(datasetIter)//4):
+        inputs, target = datasetIter.__getitem__(i)
         energy, attn_global, local_rep = model.predict(inputs)
+        # energy, local_rep = model.predict(inputs)
     
         ga_scores.extend(attn_global)
         struct_energy.extend(energy)

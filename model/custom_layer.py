@@ -40,6 +40,7 @@ class AutoClipper:
         l2sum_safe = tf.where(pred, l2sum, tf.ones_like(l2sum))
         return tf.squeeze(tf.where(pred, tf.math.sqrt(l2sum_safe), l2sum))
 
+
 class SGDR(tf.keras.callbacks.Callback):
     """This callback implements the learning rate schedule for
     Stochastic Gradient Descent with warm Restarts (SGDR),
@@ -126,6 +127,7 @@ class SGDR(tf.keras.callbacks.Callback):
             tf.keras.backend.set_value(self.model.optimizer.lr, self.max_lr)
         else:
             tf.keras.backend.set_value(self.model.optimizer.lr, self.sgdr())
+
 
 class SGDRC(tf.keras.callbacks.Callback):
     """This callback implements the learning rate schedule for
@@ -300,7 +302,8 @@ class LocalAttention(tf.keras.layers.Layer):
         # shape key [bs, len_atom_centers, num_neighbors, heads dim]
         key = tf.reshape(key, [bs, -1, nlen, self.num_head, self.hdim])
 
-        value = tf.reshape(value, [bs, -1, nlen, self.num_head, self.hdim])
+        if self.v_proj:
+            value = tf.reshape(value, [bs, -1, nlen, self.num_head, self.hdim])
 
         # shape query_t [bs, len_atom_centers, heads, dim] * [bs, len_atom_centers, num_neighbors, heads, dim]
         # shape energy [bs, heads, len_atom_centers, num_neighbors]

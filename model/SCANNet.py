@@ -52,7 +52,7 @@ class SCANNet(tf.keras.models.Model):
                                                  dtype='float32')
 
         # L layers Local Attention
-        self.local_attention = [LocalAttention(name='LA_layer_'+str(i),
+        self.local_attention = [LocalAttention(name='LA_layer_'+str(i), v_proj=True,
                                                dim=config['local_dim'], num_head=config['num_head'],
                                                activation='swish')
                                 for i in range(config['n_attention'])]
@@ -75,7 +75,8 @@ class SCANNet(tf.keras.models.Model):
                                                    kernel_regularizer=regularizers.l2(1e-4))
 
         # Global Attention layer
-        self.global_attention = GlobalAttention(name='GA_layer', dim=config['global_dim'], scale=config['scale'],
+        self.global_attention = GlobalAttention(name='GA_layer', v_proj=True,
+                                                dim=config['global_dim'], scale=config['scale'],
                                                 norm=config['use_ga_norm'])
 
         # Dense layer on structure representation
@@ -203,8 +204,9 @@ def create_model(config, mode='train'):
 
     if config['model']['use_ring']:
         shape = 2
-        if config['model']['use_hyp']: shape=4
-        
+        if config['model']['use_hyp']:
+            shape = 4
+
         ring_info = tf.keras.layers.Input(
             name='ring_aromatic', shape=(None, shape), dtype='float32')
 
@@ -225,8 +227,8 @@ def create_model(config, mode='train'):
         gammodel.summary()
         model.compile(loss=root_mean_squared_error,
                       optimizer=tf.keras.optimizers.Adam(config['hyper']['lr'],
-                                                     gradient_transformers=[AutoClipper(10)]),
-                    metrics=['mae', r2_square])
+                                                         gradient_transformers=[AutoClipper(10)]),
+                      metrics=['mae', r2_square])
 
     if mode == 'infer':
         out_energy, attn_global, list_center_rep = gammodel(

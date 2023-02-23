@@ -52,22 +52,14 @@ class SCANNet(tf.keras.models.Model):
                                                  dtype='float32')
 
         # L layers Local Attention
-        self.local_attention = [LocalAttention(name='LA_layer_'+str(i), v_proj=True,
+        self.local_attention = [LocalAttention(v_proj=False, kq_proj=True,
                                                dim=config['local_dim'], num_head=config['num_head'],
                                                activation='swish')
                                 for i in range(config['n_attention'])]
 
         if self.attn_norm:
-            self.forward_norm = [tf.keras.layers.Dense(config['local_dim'],
-                                                       name='forward_trans' + str(i), dtype='float32',
-                                                       kernel_regularizer=regularizers.l2(1e-4))
-                                 for i in range(config['n_attention'])]
-
-            self.norm_1 = [tf.keras.layers.LayerNormalization(name='layer_norm_' + str(i), epsilon=1e-6)
-                           for i in range(config['n_attention'])]
-
-            self.norm_2 = [tf.keras.layers.LayerNormalization(name='forward_norm_' + str(i), epsilon=1e-6)
-                           for i in range(config['n_attention'])]
+            self.residual_norm = [ResidualNorm(
+                config['local_dim']) for i in range(config['n_attention'])]
 
         # Dense layer before Global Attention
         self.dense_afterLc = tf.keras.layers.Dense(config['global_dim'], activation='swish',
@@ -75,7 +67,7 @@ class SCANNet(tf.keras.models.Model):
                                                    kernel_regularizer=regularizers.l2(1e-4))
 
         # Global Attention layer
-        self.global_attention = GlobalAttention(name='GA_layer', v_proj=True,
+        self.global_attention = GlobalAttention(v_proj=False, kq_proj=True,
                                                 dim=config['global_dim'], scale=config['scale'],
                                                 norm=config['use_ga_norm'])
 
@@ -116,11 +108,7 @@ class SCANNet(tf.keras.models.Model):
                                                           neighbor_distance,  neighbor_mask)
             if self.attn_norm:
                 # 2 Forward Norm layers
-                attention_norm = self.norm_1[i](context + centers)
-
-                f_out = self.forward_norm[i](attention_norm)
-
-                centers = self.norm_2[i](f_out+attention_norm)
+                centers = self.residual_norm[i](context)
             else:
                 centers = context
 

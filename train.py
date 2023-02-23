@@ -100,7 +100,7 @@ def main(args):
 
     lr = SGDRC(lr_min=config['hyper']['min_lr'],
                lr_max=config['hyper']['lr'], t0=50, tmult=2,
-               lr_max_compression=1, trigger_val_mae=60)
+               lr_max_compression=1, trigger_val_mae=100)
 
     sgdr = LearningRateScheduler(lr.lr_scheduler)
     callbacks.append(sgdr)

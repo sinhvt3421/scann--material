@@ -2,73 +2,7 @@ import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 from math import ceil
 import numpy as np
-
-def pad_sequence(sequences, maxlen=None, dtype='int32', value=0, padding='post'):
-
-    num_samples = len(sequences)
-    sample_shape = ()
-
-    if maxlen is None:
-        lengths = []
-        for x in sequences:
-            lengths.append(len(x))
-        maxlen = np.max(lengths)
-
-    sample_shape = np.asarray(sequences[0]).shape[1:]
-
-    x = np.full((num_samples, maxlen) + sample_shape, value, dtype=dtype)
-
-    for idx, s in enumerate(sequences):
-        trunc = s[-maxlen:]
-        trunc = np.asarray(trunc, dtype=dtype)
-        x[idx, : len(trunc)] = trunc
-    return x
-
-
-def pad_nested_sequences(sequences, max_len_1, max_len_2, dtype='int32', value=0):
-    """
-        Pad 3D array 
-    Args:
-        sequences (list): 3D array axis=(0,1,2)
-        max_len_1 (int): Max length inside axis = 2
-        max_len_2 (int): Max length outside axis = 1
-        dtype (str, optional):  Defaults to 'int32'.
-        value (int, optional): Padding value. Defaults to 0.
-
-    Returns:
-        np.ndarray: Padded sequences
-    """
-    pad_sq = [pad_sequence(
-        sq, padding='post', maxlen=max_len_1, value=value,dtype=dtype) for sq in sequences]
-    pad_sq = pad_sequence(pad_sq, padding='post',
-                          maxlen=max_len_2, value=value,dtype=dtype)
-    return pad_sq
-
-
-class GaussianDistance():
-    """
-    Expand distance with Gaussian basis sit at centers and with width 0.5.
-    """
-
-    def __init__(self, centers: np.ndarray = np.linspace(0, 4, 20), width=0.5):
-        """
-        Args:
-            centers: (np.array) centers for the Gaussian basis
-            width: (float) width of Gaussian basis
-        """
-        self.centers = centers
-        self.width = width
-
-    def convert(self, d: np.ndarray):
-        """
-        expand distance vector d with given parameters
-        Args:
-            d: (1d array) distance array
-        Returns
-            (matrix) N*M matrix with N the length of d and M the length of centers
-        """
-        d = np.array(d)
-        return np.exp(-((d[:, None] - self.centers[None, :]) ** 2) / self.width ** 2)
+from .general import GaussianDistance, pad_nested_sequences
 
 
 class DataIterator(Sequence):

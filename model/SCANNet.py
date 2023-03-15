@@ -1,10 +1,11 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import tensorflow as tf
 import numpy as np
 import tensorflow.keras.backend as K
 from tensorflow.keras import regularizers
 from model.custom_layer import *
-import tensorflow_addons as tfa
-
 
 class SCANNet(tf.keras.models.Model):
     """
@@ -50,7 +51,8 @@ class SCANNet(tf.keras.models.Model):
         self.dense_embed = tf.keras.layers.Dense(config['local_dim'],
                                                  activation='swish', name='dense_embed',
                                                  dtype='float32')
-
+        self.dropout =  tf.keras.layers.Dropout(0.1)
+        
         # L layers Local Attention
         self.local_attention = [LocalAttention(v_proj=False, kq_proj=True,
                                                dim=config['local_dim'], num_head=config['num_head'],
@@ -76,6 +78,8 @@ class SCANNet(tf.keras.models.Model):
             config['dense_out'], activation='swish', name='bf_property',
             kernel_regularizer=regularizers.l2(1e-4))
 
+        # self.dropout2 =  tf.keras.layers.Dropout(0.1)
+        
         # Output property
         self.predict_property = tf.keras.layers.Dense(
             1, name='predict_property')
@@ -97,15 +101,14 @@ class SCANNet(tf.keras.models.Model):
         for i in range(self.n_attention):
 
             # Get neighbor vector from indices, size [B, M, N, d] and  Multiply weight Voronoi with neighbor
-            neighbor_weighted = tf.gather_nd(
-                centers, neighbor_indices) * neigbor_weight
+            neighbors= tf.gather_nd(centers, neighbor_indices)
 
             # Shape neighbor_weighted [B, M, N, embedding_dim ]
-            neighbor_weighted = tf.reshape(neighbor_weighted, [B, M, N, D])
+            neighbors = tf.reshape(neighbors, [B, M, N, D])
 
             # Local attention for local structure representation
-            attn_local, context = self.local_attention[i](centers, neighbor_weighted,
-                                                          neighbor_distance,  neighbor_mask)
+            attn_local, context = self.local_attention[i](centers, neighbors,
+                                                          neighbor_distance, neigbor_weight,  neighbor_mask)
             if self.attn_norm:
                 # 2 Forward Norm layers
                 centers = self.residual_norm[i](context)
@@ -114,7 +117,7 @@ class SCANNet(tf.keras.models.Model):
 
             list_context.append(centers)
 
-        return centers, list_context
+        return centers, list_context, attn_local
 
     def call(self, inputs, train=True, global_attn=True):
         """     
@@ -145,8 +148,9 @@ class SCANNet(tf.keras.models.Model):
             centers = tf.concat([centers, ring_embed], -1)
 
         centers = self.dense_embed(centers)
-
-        centers, list_center_rep = self.local_attention_loop(centers, neighbor, neighbor_mask,
+        centers = self.dropout(centers)
+        
+        centers, list_center_rep, attn_local = self.local_attention_loop(centers, neighbor, neighbor_mask,
                                                              neighbor_weight, neighbor_distance)
 
         # Dense layer after Local Attention -> representation for each local structure [B, M, d]
@@ -161,7 +165,9 @@ class SCANNet(tf.keras.models.Model):
 
         # Shape struct representation [B, d]
         struc_rep = self.dense_bftotal(struc_rep)
-
+        
+        # struc_rep = self.dropout2(struc_rep)
+        
         # Shape predict_property [B, 1]
         predict_property = self.predict_property(struc_rep)
 
@@ -170,7 +176,7 @@ class SCANNet(tf.keras.models.Model):
 
         else:
             if global_attn:
-                return predict_property, attn_global, list_center_rep
+                return predict_property, attn_global, list_center_rep, attn_local
             else:
                 return predict_property
 
@@ -219,11 +225,11 @@ def create_model(config, mode='train'):
                       metrics=['mae', r2_square])
 
     if mode == 'infer':
-        out_energy, attn_global, list_center_rep = gammodel(
+        out_energy, attn_global, list_center_rep, attn_local = gammodel(
             inputs, train=False)
 
         model = tf.keras.Model(inputs=inputs, outputs=[
-                               out_energy, attn_global, list_center_rep])
+                               out_energy, attn_global, list_center_rep, attn_local])
         gammodel.summary()
 
     return model

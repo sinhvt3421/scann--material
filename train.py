@@ -10,7 +10,7 @@ import argparse
 import time
 
 from model.SCANNet import create_model
-from model.custom_layer import SGDRC, SGDR
+from model.custom_layer import SGDRC
 
 from utils.datagenerator import DataIterator
 from utils.general import *
@@ -95,12 +95,9 @@ def main(args):
     early_stop = tf.keras.callbacks.EarlyStopping(
         monitor='val_mae', patience=200)
 
-    # lr = SGDR(min_lr=config['hyper']['min_lr'],
-    #           max_lr=config['hyper']['lr'], base_epochs=50, mul_epochs=2)
-
     lr = SGDRC(lr_min=config['hyper']['min_lr'],
                lr_max=config['hyper']['lr'], t0=50, tmult=2,
-               lr_max_compression=1, trigger_val_mae=100)
+               lr_max_compression=1.2, trigger_val_mae=80)
 
     sgdr = LearningRateScheduler(lr.lr_scheduler)
     callbacks.append(sgdr)

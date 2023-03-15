@@ -25,5 +25,7 @@ chemical_symbols = [
     'Lv', 'Ts', 'Og']
 
 atomic_numbers = {}
+atoms_symbol = {}
 for Z, symbol in enumerate(chemical_symbols):
     atomic_numbers[symbol] = Z
+    atoms_symbol[str(Z)] = symbol

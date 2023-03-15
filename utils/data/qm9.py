@@ -21,9 +21,9 @@ logging.disable(logging.CRITICAL)
 atomic_atom = {'1': 'H', '6': 'C', '7': 'N', '8': 'O', '9': 'F'}
 atom_atomic = {'H': 1, 'C': 6, 'N': 7, 'O': 8, 'F': 9}
 
-conversions = [1., 1., 1., 1., Bohr ** 3 / Ang ** 3,
+conversions = [1., 1., 1., 1., Bohr**3/Ang**3,
                Hartree / eV, Hartree / eV, Hartree / eV,
-               Bohr ** 2 / Ang ** 2, Hartree / eV,
+               1., Hartree / eV,
                Hartree / eV, Hartree / eV, Hartree / eV,
                Hartree / eV, 1.]
 

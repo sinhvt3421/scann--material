@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 from math import ceil
 import numpy as np
-from .general import GaussianDistance, pad_nested_sequences
+from .general import GaussianDistance, pad_nested_sequences, pad_sequence
 
 
 class DataIterator(Sequence):
@@ -11,7 +11,7 @@ class DataIterator(Sequence):
     """
 
     def __init__(self, data_energy, data_neighbor, batch_size=32,
-                 converter=True, use_ring=False, use_hyp=False,
+                 converter=True, use_ring=False,
                  centers=np.linspace(0, 4, 20), shuffle=False):
         """
         Args:
@@ -32,8 +32,6 @@ class DataIterator(Sequence):
         self.data_energy = data_energy
 
         self.use_ring = use_ring
-        self.use_hyp = use_hyp
-        self.intensive = True
 
         if converter:
             self.converter = 1000
@@ -96,12 +94,9 @@ class DataIterator(Sequence):
         mask_atom = (pad_atom != 0)
 
         if self.use_ring:
-            if self.use_hyp:
-                extra_info = [np.stack([center[2], center[3], center[4], center[5]], -1)
+            extra_info = [np.stack([center[2], center[3]], -1)
                           for center in batch_atom]
-            else:
-                extra_info = [np.stack([center[2], center[3]], -1)
-                          for center in batch_atom]
+            
             pad_extra = pad_sequence(
                 extra_info, padding='post',maxlen=max_length_center, value=0, dtype='int32')
 

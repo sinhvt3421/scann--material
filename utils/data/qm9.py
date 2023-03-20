@@ -6,13 +6,9 @@ import shutil
 import tarfile
 import tempfile
 from urllib import request as request
-
-import openbabel
 from openbabel import pybel
-from rdkit import Chem
 
 from ase.units import Debye, Bohr, Hartree, eV, Ang
-from ase.io.extxyz import read_xyz
 
 logging.getLogger("").setLevel(logging.CRITICAL)
 logging.disable(logging.CRITICAL)
@@ -110,22 +106,11 @@ def process_qm9(dataset='qm9', save_path=''):
 
         ring_info = [1 if at.IsInRing() else 0 for at in atoms]
         aromatic = [1 if at.IsAromatic() else 0 for at in atoms]
-        
-        acceptor = [1 if at.IsHbondAcceptor() else 0 for at in atoms]
-        donor_b = []
-        for i, at in enumerate(mol.atoms):
-            if at.type == 'H':
-                donor_b.append(atoms[i].IsHbondDonorH())
-            else:
-                donor_b.append(atoms[i].IsHbondDonor())
-
-        donor = [1 if at else 0 for at in donor_b]
 
         nstruct = {'id': idx, 'Properties': properties,
                    'Atoms': atomic_symbols, 'Atomic': atomics,
                    'Coords': coordinates, 'Ring': ring_info,
-                   'Aromatic': aromatic, 
-                   'Acceptor':acceptor, 'Donor':donor}
+                   'Aromatic': aromatic,}
 
         all_struct.append(nstruct)
 

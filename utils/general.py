@@ -99,7 +99,7 @@ def split_data(len_data, test_percent=0.1, train_size=None, test_size=None):
     return train, valid, test, extra
 
 
-def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring=True, use_hyp=False):
+def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring=True):
     """
         Load dataset and neighbor information
     Args:
@@ -125,10 +125,6 @@ def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring
 
     for i, d in enumerate(data_full):
         if use_ring:
-            if use_hyp:
-                data_energy.append([d['Atomic'], d['Properties'][target_prop],
-                                    d['Ring'], d['Aromatic'], d['Acceptor'], d['Donor']])
-            else:
                 data_energy.append([d['Atomic'], d['Properties'][target_prop],
                                     d['Ring'], d['Aromatic']])
         else:
@@ -158,25 +154,14 @@ def process_xyz(file):
     ring_info = [1 if at.IsInRing() else 0 for at in atoms]
     aromatic = [1 if at.IsAromatic() else 0 for at in atoms]
 
-    acceptor = [1 if at.IsHbondAcceptor() else 0 for at in atoms]
-    donor_b = []
-    for i, at in enumerate(mol.atoms):
-        if at.type == 'H':
-            donor_b.append(atoms[i].IsHbondDonorH())
-        else:
-            donor_b.append(atoms[i].IsHbondDonor())
-
-    donor = [1 if at else 0 for at in donor_b]
-
     nstruct = {'Atoms': atomic_symbols, 'Atomic': atomics,
                 'Coords': coordinates, 'Ring': ring_info,
-                'Aromatic': aromatic,
-                'Acceptor': acceptor, 'Donor': donor}
+                'Aromatic': aromatic}
 
     return nstruct
 
 
-def prepare_input(struct, d_t=4.0, w_t=0.2, centers=np.linspace(0, 4, 20), use_ring=True, use_hyp=False):
+def prepare_input(struct, d_t=4.0, w_t=0.2, centers=np.linspace(0, 4, 20), use_ring=True):
 
     system_atom = struct['Atoms']
     system_coord = np.array(struct['Coords'], dtype='float32')
@@ -198,10 +183,7 @@ def prepare_input(struct, d_t=4.0, w_t=0.2, centers=np.linspace(0, 4, 20), use_r
     mask_atom = (atomics != 0)
 
     if use_ring:
-        if use_hyp:
-            extra_info = [np.stack([struct['Ring'], struct['Aromatic'], struct['Acceptor'], struct['Donor']], -1)]
-        else:
-            extra_info = [np.stack([struct['Ring'], struct['Aromatic']], -1)]
+        extra_info = [np.stack([struct['Ring'], struct['Aromatic']], -1)]
             
 
     inputs = {'atomic': atomics, 'atom_mask': np.expand_dims(mask_atom, -1),

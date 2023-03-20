@@ -1,3 +1,6 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import tensorflow as tf
 from tensorflow.keras.callbacks import *
 
@@ -9,8 +12,8 @@ import yaml
 import argparse
 import time
 
-from model.SCANNet import create_model
-from model.custom_layer import SGDRC
+from scannet.models import SCANNet
+from scannet.layers import SGDRC
 
 from utils.datagenerator import DataIterator
 from utils.general import *
@@ -37,19 +40,18 @@ def main(args):
     config = yaml.safe_load(open(args.dataset))
 
     config['model']['use_ring'] = args.use_ring
-    config['model']['use_hyp'] = args.use_hyp
     config['hyper']['use_ref'] = args.use_ref
     config['hyper']['target'] = args.target
 
-    print('Create model use Ring Information: ', args.use_ring, ' use Acceptor/Donor Information: ', args.use_hyp)
+    print('Create model use Ring Information: ', args.use_ring)
 
-    model = create_model(config, mode='train')
+    model = SCANNet(config)
     if args.pretrained:
         print('load pretrained weight')
         model.load_weights(config['hyper']['pretrained'])
 
     print('Load data for dataset: ', args.dataset)
-    data_energy, data_neighbor = load_dataset(use_ref=args.use_ref, use_ring=args.use_ring,use_hyp=args.use_hyp,
+    data_energy, data_neighbor = load_dataset(use_ref=args.use_ref, use_ring=args.use_ring,
                                               dataset=config['hyper']['data_energy_path'],
                                               dataset_neighbor=config['hyper']['data_nei_path'],
                                               target_prop=args.target)
@@ -69,27 +71,25 @@ def main(args):
     trainIter = DataIterator(batch_size=config['hyper']['batch_size'],
                              data_neighbor=data_neighbor[train],
                              data_energy=data_energy[train], converter=True,
-                             use_ring=args.use_ring, use_hyp=args.use_hyp, shuffle=True)
+                             use_ring=args.use_ring, shuffle=True)
 
     validIter = DataIterator(batch_size=config['hyper']['batch_size'],
                              data_neighbor=data_neighbor[valid],
                              data_energy=data_energy[valid], converter=True,
-                             use_ring=args.use_ring,use_hyp=args.use_hyp)
+                             use_ring=args.use_ring)
 
     testIter = DataIterator(batch_size=config['hyper']['batch_size'],
                             data_neighbor=data_neighbor[test],
                             data_energy=data_energy[test], converter=True,
-                            use_ring=args.use_ring,use_hyp=args.use_hyp)
+                            use_ring=args.use_ring)
 
-    if not os.path.exists(config['hyper']['save_path'] + '_' + args.target):
-        os.makedirs(os.path.join(
-            config['hyper']['save_path'] + '_' + args.target, 'models/'))
+    if not os.path.exists('{}_{}/models/'.format(config['hyper']['save_path'], args.target)):
+        os.makedirs('{}_{}/models/'.format(config['hyper']['save_path'], args.target))
 
     callbacks = []
-    callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(config['hyper']['save_path'] + '_' + args.target,
-                                                                              'models/', "model.h5"),
+    callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath='{}_{}/models/model.h5'.format(config['hyper']['save_path'], args.target),
                                                         monitor='val_mae',
-                                                        save_weights_only=True, verbose=2,
+                                                        save_weights_only=False, verbose=2,
                                                         save_best_only=True))
 
     early_stop = tf.keras.callbacks.EarlyStopping(
@@ -107,17 +107,11 @@ def main(args):
 
     yaml.safe_dump(config, open(config['hyper']['save_path'] + '_' + args.target + '/config.yaml', 'w'),
                    default_flow_style=False)
-
-    shutil.copy('model/SCANNet.py',
-                config['hyper']['save_path'] + '_' + args.target + '/SCANNet.py')
-    
-    shutil.copy('model/custom_layer.py',
-                config['hyper']['save_path'] + '_' + args.target + '/custom_layer.py')
     
     shutil.copy('train.py',
                 config['hyper']['save_path'] + '_' + args.target + '/train.py')
 
-    hist = model.fit(trainIter, epochs=1000,
+    hist = model.fit(trainIter, epochs=2,
                      validation_data=validIter,
                      callbacks=callbacks,
                      verbose=2, shuffle=False,
@@ -126,10 +120,12 @@ def main(args):
 
     print('Training time: ', time.time()-start)
 
+    tf.keras.backend.clear_session()
+    del model
+
     # Predict for testdata
     print('Load best validation weight for predicting testset')
-    model.load_weights(os.path.join(config['hyper']['save_path'] + '_' + args.target,
-                                    'models/', 'model.h5'))
+    model.load_model('{}_{}/models/model.h5'.format(config['hyper']['save_path'], args.target))
 
     y_predict = []
     y = []
@@ -145,11 +141,9 @@ def main(args):
 
     save_data = [y_predict, y, test, hist.history]
 
-    np.save(config['hyper']['save_path'] + '_' +
-            args.target + '/hist_data.npy', save_data)
+    np.save('{}_{}/hist_data.npy'.format(config['hyper']['save_path'], args.target),save_data)
 
-    with open(config['hyper']['save_path'] + '_' +
-              args.target + '/report.txt', 'w') as f:
+    with open('{}_{}/report.txt'.format(config['hyper']['save_path'], args.target), 'w') as f:
         f.write('Training MAE: ' + str(min(hist.history['mae'])) + '\n')
         f.write('Val MAE: ' + str(min(hist.history['val_mae'])) + '\n')
         f.write('Test MAE: ' + str(mean_absolute_error(y, y_predict)) +
@@ -169,9 +163,6 @@ if __name__ == "__main__":
 
     parser.add_argument('--use_ring', type=bool, default=False,
                         help='Whether to use ring as extra emedding')
-    
-    parser.add_argument('--use_hyp', type=bool, default=False,
-                        help='Whether to use acceptor or donor informatio as extra emedding')
 
     parser.add_argument('--use_ref', type=bool, default=False,
                         help='Whether to use ref optimization energy')

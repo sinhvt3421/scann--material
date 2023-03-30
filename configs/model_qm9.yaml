@@ -13,12 +13,12 @@ model:
 hyper:
   batch_size: 128
   test_percent: 0.1
-  train_size: 110000
-  test_size: 10000
+  train_size: ''
+  test_size: ''
   data_size: 130831
   data_nei_path: 'processed_data/qm9/qm9_data_neighbor_dt4.0_wt0.2.npy'
   data_energy_path: 'processed_data/qm9/qm9_data_energy.npy'
   lr: 0.0005
-  min_lr: 0.00005
-  save_path: 'trained_models/model_qm9_att8_ring_ga_nov_key_drop_2'
-  pretrained: 'trained_models/model_qm9_att8_ring_noga_nov_key_drop_gap/models/model.h5'
+  min_lr: 0.0001
+  save_path: 'trained_models/model_qm9'
+  pretrained: 'trained_models/model_qm9_homo/models/model.h5'

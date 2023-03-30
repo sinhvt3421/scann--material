@@ -34,12 +34,12 @@ the structural-property relationships of the materials.
 
 # SCANNet framework
 
-The Global Attention model Network (GAMNet) is an implementation of deep attention mechanism for materials science
+The Self-Consistent Atention-based Neural Network (SCANNet) is an implementation of deep attention mechanism for materials science
 
 Figure 1 shows the overall schematic of the model
 
 ![Model architecture](resources/model_semantic.jpg)
-<div align='center'><strong>Figure 1. Schematic of  GAMNet.</strong></div>
+<div align='center'><strong>Figure 1. Schematic of  SCANNet.</strong></div>
 
 <a name="usage"></a>
 
@@ -66,11 +66,11 @@ The MAEs on the various models are given below:
 
 | Property | Units      | MAE   |
 |----------|------------|-------|
-| HOMO     | meV         | 51 |
-| LUMO     | meV         | 40 |
-| Gap      | meV         | 65 |
-| α        | Bohr^3     | 0.15|
-| Cv       | cal/(molK) | 0.059 |
+| HOMO     | meV         | 44 |
+| LUMO     | meV         | 37 |
+| Gap      | meV         | 67 |
+| α        | Bohr^3     | 0.141|
+| Cv       | cal/(molK) | 0.050 |
 
 <a name="dataset"></a>
 
@@ -78,13 +78,34 @@ The MAEs on the various models are given below:
 
 ## Experiments
 
-The code for experiments specific is placed in the folder [configs] (<https://github.com/sinhvt3421/material-dl/tree/master/configs>)
+The settings for experiments specific is placed in the folder [configs](configs)
 
 We provide an implementation for the QM9 experiments, the Fullerence-MD, the Pt/graphene-MD and SmFe12-MD experiments
 
-## Basic usage
+# Basic usage
+## Model training
+For training new model for QM9 dataset, please follow the below example scripts. If the data for QM9 is not avaiable, please run the code ```preprocess_data.py``` for downloading and creating suitable data formats for SCANNet model.
+```
+python preprocess_data.py qm9 processed_data --dt=4.0 --wt=0.2
+```
+The data for QM9 will be processed and saved into folder [propessed_data](processed_data).
+After that, please change the config file located in folder [configs](configs) for customizing the model hyperparameters or data loading/saving path.
+```
+python train.py homo configs/model_qm9.yaml --use_ring=True
+```
 
-```python
-###
+For training dataset Fullerence-MD with pretrained weights from QM9 dataset, please follow these steps. The pretrained model will be load based on the path from argument. 
+```
+python preprocess_data.py fullerence processed_data --data_path='experiments/fullerence' --dt=4.0 --wt=0.2
+...
+python train.py homo configs/model_fullerence.yaml --use_ring=True --pretrained=..../qm9/homo/models/model.h5
+```
+## Model inference
+The code ```predict_files.py``` supports loading a ```xyz``` file and predicting the properties with the pretrained models. The information about global attention (GA) score for interpreting the structure-property relationship is also provided and saved into ```xyz``` format. Please use a visualization tool such as Ovito for showing the results.
+```
+python predict_files.py ..../models.h5 save_path.../ experiments/molecules/Dimethyl_fumarate.xyz
+``` 
+![Visualization of GA scores](resources/ovito_visual.png)
+<div align='center'><strong>Figure 2. Example of SCANNet prediction for LUMO property.</strong></div>
 
-###
+<a name="usage"></a>

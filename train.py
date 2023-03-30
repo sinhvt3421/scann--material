@@ -157,7 +157,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_ref', type=bool, default=False,
                         help='Whether to use ref optimization energy')
 
-    parser.add_argument('--pretrained', type=bool, default=False,
+    parser.add_argument('--pretrained', type=str, default='',
                         help='Whether to use pretrained model')
 
     args = parser.parse_args()

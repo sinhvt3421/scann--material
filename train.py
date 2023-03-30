@@ -1,24 +1,18 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-import tensorflow as tf
-from tensorflow.keras.callbacks import *
-
-import shutil
-import numpy as np
-import random
-import os
-import yaml
-import argparse
-import time
-
-from scannet.models import SCANNet
-from scannet.layers import SGDRC
-
-from utils.datagenerator import DataIterator
-from utils.general import *
-
 from sklearn.metrics import r2_score, mean_absolute_error
+from utils.general import *
+from utils.datagenerator import DataIterator
+from scannet.layers import SGDRC
+from scannet.models import SCANNet
+import time
+import argparse
+import yaml
+import random
+import numpy as np
+from tensorflow.keras.callbacks import *
+import tensorflow as tf
 
 
 def set_seed(seed=2134):
@@ -32,10 +26,11 @@ def set_seed(seed=2134):
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(seed)
 
+
 def main(args):
-    
+
     set_seed(2134)
-    
+
     start = time.time()
     config = yaml.safe_load(open(args.dataset))
 
@@ -45,10 +40,11 @@ def main(args):
 
     print('Create model use Ring Information: ', args.use_ring)
 
-    model = SCANNet(config)
     if args.pretrained:
-        print('load pretrained weight')
-        model.load_weights(config['hyper']['pretrained'])
+        print('load pretrained model')
+        model = SCANNet.load_model(config['hyper']['pretrained'])
+    else:
+        model = SCANNet(config)
 
     print('Load data for dataset: ', args.dataset)
     data_energy, data_neighbor = load_dataset(use_ref=args.use_ref, use_ring=args.use_ring,
@@ -58,7 +54,8 @@ def main(args):
 
     config['hyper']['data_size'] = len(data_energy)
 
-    train, valid, test, extra = split_data(len_data=len(data_energy), test_percent=config['hyper']['test_percent'],
+    train, valid, test, extra = split_data(len_data=len(data_energy),
+                                           test_percent=config['hyper']['test_percent'],
                                            train_size=config['hyper']['train_size'],
                                            test_size=config['hyper']['test_size'])
 
@@ -68,23 +65,17 @@ def main(args):
     print("Number of train data : ", len(train), " , Number of valid data: ", len(valid),
           " , Number of test data: ", len(test))
 
-    trainIter = DataIterator(batch_size=config['hyper']['batch_size'],
-                             data_neighbor=data_neighbor[train],
-                             data_energy=data_energy[train], converter=True,
-                             use_ring=args.use_ring, shuffle=True)
-
-    validIter = DataIterator(batch_size=config['hyper']['batch_size'],
-                             data_neighbor=data_neighbor[valid],
-                             data_energy=data_energy[valid], converter=True,
-                             use_ring=args.use_ring)
-
-    testIter = DataIterator(batch_size=config['hyper']['batch_size'],
-                            data_neighbor=data_neighbor[test],
-                            data_energy=data_energy[test], converter=True,
-                            use_ring=args.use_ring)
+    trainIter, validIter, testIter = [DataIterator(batch_size=config['hyper']['batch_size'],
+                                                   data_neighbor=data_neighbor[indices],
+                                                   data_energy=data_energy[indices],
+                                                   converter=True,
+                                                   use_ring=args.use_ring,
+                                                   shuffle=indices == train)
+                                      for indices in (train, valid, test)]
 
     if not os.path.exists('{}_{}/models/'.format(config['hyper']['save_path'], args.target)):
-        os.makedirs('{}_{}/models/'.format(config['hyper']['save_path'], args.target))
+        os.makedirs(
+            '{}_{}/models/'.format(config['hyper']['save_path'], args.target))
 
     callbacks = []
     callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath='{}_{}/models/model.h5'.format(config['hyper']['save_path'], args.target),
@@ -105,13 +96,10 @@ def main(args):
     callbacks.append(lr)
     callbacks.append(early_stop)
 
-    yaml.safe_dump(config, open(config['hyper']['save_path'] + '_' + args.target + '/config.yaml', 'w'),
+    yaml.safe_dump(config, open('{}_{}/config.yaml'.format(config['hyper']['save_path'],args.target), 'w'),
                    default_flow_style=False)
-    
-    shutil.copy('train.py',
-                config['hyper']['save_path'] + '_' + args.target + '/train.py')
 
-    hist = model.fit(trainIter, epochs=10,
+    hist = model.fit(trainIter, epochs=1000,
                      validation_data=validIter,
                      callbacks=callbacks,
                      verbose=2, shuffle=False,
@@ -125,7 +113,8 @@ def main(args):
 
     # Predict for testdata
     print('Load best validation weight for predicting testset')
-    model.load_model('{}_{}/models/model.h5'.format(config['hyper']['save_path'], args.target))
+    model = SCANNet.load_model(
+        '{}_{}/models/model.h5'.format(config['hyper']['save_path'], args.target))
 
     y_predict = []
     y = []
@@ -141,7 +130,8 @@ def main(args):
 
     save_data = [y_predict, y, test, hist.history]
 
-    np.save('{}_{}/hist_data.npy'.format(config['hyper']['save_path'], args.target),save_data)
+    np.save(
+        '{}_{}/hist_data.npy'.format(config['hyper']['save_path'], args.target), save_data)
 
     with open('{}_{}/report.txt'.format(config['hyper']['save_path'], args.target), 'w') as f:
         f.write('Training MAE: ' + str(min(hist.history['mae'])) + '\n')

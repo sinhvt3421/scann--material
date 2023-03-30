@@ -1,15 +1,12 @@
-from model.SCANNet import create_model
-from utils.datagenerator import DataIterator
-from utils.general import process_xyz, prepare_input
-import tensorflow as tf
-
-import numpy as np
 import os
-import yaml
-import argparse
-import pickle
-
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+import pickle
+import argparse
+import yaml
+import numpy as np
+from utils.general import process_xyz, prepare_input
+from scannet.models import SCANNet
 
 def main(args):
     config = yaml.safe_load(
@@ -20,28 +17,30 @@ def main(args):
 
     inputs = prepare_input(
         struct, use_ring=config['model']['use_ring'], use_hyp=config['model']['use_hyp'])
+    
+    print('Load pretrained weight for target ', config['hyper']['target'])
+    model = SCANNet.load_model_infer(os.path.join(
+        args.trained_model, 'models', 'model.h5'))
 
-    print('Loading pretrained model:')
-    model = create_model(config, mode='infer')
-    model.load_weights(os.path.join(args.trained_model, 'models', 'model.h5'))
-
-    energy, attn_global, local_rep, attn_local = model.predict(inputs)
+    energy, attn_global= model.predict(inputs)
 
     print('Save prediction and GA score')
     if not os.path.exists(args.save_path):
         os.makedirs(args.save_path)
 
     struct_name = os.path.splitext(os.path.basename(args.file_name))[0]
-    save_xyz = '{}_ga_scores_{}.xyz'.format(struct_name, config['hyper']['target'])
+    save_xyz = '{}_ga_scores_{}.xyz'.format(
+        struct_name, config['hyper']['target'])
 
     with open(os.path.join(args.save_path,  save_xyz), 'w') as f:
         f.write(str(len(struct['Atoms'])) + '\n')
         f.write('XXX \n')
         for i in range(len(struct['Atoms'])):
-            f.write(struct['Atoms'][i] + ' ' + str(struct['Coords'][i][0]) + ' '
-                    + str(struct['Coords'][i][1]) + ' ' + str(struct['Coords'][i][2]) + ' ' + str(attn_global[0][i][0]) + '\n')
+            f.write('{}\t{}\t{}\t{}\t{}\n'.format(
+                struct['Atoms'][i], struct['Coords'][i][0],
+                struct['Coords'][i][1], struct['Coords'][i][2], attn_global[0][i][0]))
 
-    pickle.dump([inputs, energy, attn_global, local_rep, attn_local], open(
+    pickle.dump([inputs, energy, attn_global], open(
         os.path.join(args.save_path, struct_name + '_ga_scores.pickle'), 'wb'))
 
 

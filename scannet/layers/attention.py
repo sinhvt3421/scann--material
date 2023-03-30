@@ -9,11 +9,11 @@ class ResidualNorm(keras.layers.Layer):
         super(ResidualNorm, self).__init__()
         self.dim = dim
         self.dropout = dropout_rate
+        
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(dim, activation='swish',
                                   kernel_regularizer=regularizers.l2(1e-4)),
-            tf.keras.layers.Dense(dim,
-                                  kernel_regularizer=regularizers.l2(1e-4)),
+            tf.keras.layers.Dense(dim, kernel_regularizer=regularizers.l2(1e-4)),
             tf.keras.layers.Dropout(dropout_rate)])
 
         self.add = tf.keras.layers.Add()
@@ -61,7 +61,7 @@ class LocalAttention(keras.layers.Layer):
 
         self.v_proj = v_proj
         self.kq_proj = kq_proj
-
+        
         # Linear projection before attention
         self.proj_q = tf.keras.layers.Dense(
             dim, name='query',
@@ -210,10 +210,10 @@ class GlobalAttention(keras.layers.Layer):
 
         # Linear proj. before attention
         self.proj_q = tf.keras.layers.Dense(
-            dim, name='query', kernel_regularizer=regularizers.l2(1e-4), activation='relu' if self.norm else None)
+            dim, name='query', kernel_regularizer=regularizers.l2(1e-4))
 
         self.proj_k = tf.keras.layers.Dense(
-            dim,  name='key', kernel_regularizer=regularizers.l2(1e-4), activation='relu' if self.norm else None)
+            dim,  name='key', kernel_regularizer=regularizers.l2(1e-4))
 
         if self.v_proj:
             self.proj_v = tf.keras.layers.Dense(
@@ -256,15 +256,14 @@ class GlobalAttention(keras.layers.Layer):
         # Normalize the score for better softmax behaviors
         if self.norm:
             # Normalize score
-            attn, _ = tf.linalg.normalize(
-                agg_attention, ord=1, axis=1, name=None
+            agg_attention, _ = tf.linalg.normalize(
+                agg_attention, ord='euclidean', axis=1, name=None
             )
 
-        else:
-            mask_scale = (1.0 - mask) * -1e9
-            attn += mask_scale
+        mask_scale = (1.0 - mask) * -1e9
+        agg_attention += mask_scale
 
-            attn = tf.nn.softmax(attn, 1)
+        attn = tf.nn.softmax(agg_attention, 1)
 
         if self.v_proj:
             v = value

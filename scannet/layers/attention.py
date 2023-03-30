@@ -210,10 +210,10 @@ class GlobalAttention(keras.layers.Layer):
 
         # Linear proj. before attention
         self.proj_q = tf.keras.layers.Dense(
-            dim, name='query', kernel_regularizer=regularizers.l2(1e-4))
+            dim, name='query', kernel_regularizer=regularizers.l2(1e-4), activation='relu' if self.norm else None)
 
         self.proj_k = tf.keras.layers.Dense(
-            dim,  name='key', kernel_regularizer=regularizers.l2(1e-4))
+            dim,  name='key', kernel_regularizer=regularizers.l2(1e-4), activation='relu' if self.norm else None)
 
         if self.v_proj:
             self.proj_v = tf.keras.layers.Dense(
@@ -256,14 +256,15 @@ class GlobalAttention(keras.layers.Layer):
         # Normalize the score for better softmax behaviors
         if self.norm:
             # Normalize score
-            agg_attention, _ = tf.linalg.normalize(
-                agg_attention, ord='euclidean', axis=1, name=None
+            attn, _ = tf.linalg.normalize(
+                agg_attention, ord=1, axis=1, name=None
             )
 
-        mask_scale = (1.0 - mask) * -1e9
-        agg_attention += mask_scale
+        else:
+            mask_scale = (1.0 - mask) * -1e9
+            attn += mask_scale
 
-        attn = tf.nn.softmax(agg_attention, 1)
+            attn = tf.nn.softmax(attn, 1)
 
         if self.v_proj:
             v = value

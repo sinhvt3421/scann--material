@@ -19,7 +19,7 @@ def compute_voronoi_neighbor(system_atoms,system_coord,lattice, d_thresh=4.0, w_
                 Ex: [['H', 1, 0.4, 3.5],...]
     """
 
-    if lattice:
+    if lattice is not None:
         lattice_info = lattice
         struct = pmt.Structure(lattice=lattice_info, coords_are_cartesian=True,
                            coords=system_coord, species=system_atoms)

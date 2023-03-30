@@ -111,7 +111,7 @@ def main(args):
     shutil.copy('train.py',
                 config['hyper']['save_path'] + '_' + args.target + '/train.py')
 
-    hist = model.fit(trainIter, epochs=2,
+    hist = model.fit(trainIter, epochs=10,
                      validation_data=validIter,
                      callbacks=callbacks,
                      verbose=2, shuffle=False,

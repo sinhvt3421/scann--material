@@ -2,8 +2,8 @@ import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 from openbabel import pybel
-from .atomic_data import atoms_symbol
-from .data.voronoi_neighbor import compute_voronoi_neighbor
+from utils.dataset import atoms_symbol
+from .voronoi_neighbor import compute_voronoi_neighbor
 
 
 def pad_sequence(sequences, maxlen=None, dtype='int32', value=0, padding='post'):

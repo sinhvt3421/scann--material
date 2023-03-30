@@ -45,7 +45,7 @@ def _load_evilmols():
     return np.array(evilmols)
 
 
-def process_qm9(dataset='qm9', save_path=''):
+def process_qm9(save_path=''):
 
     print('Download qm9 data')
 
@@ -116,6 +116,8 @@ def process_qm9(dataset='qm9', save_path=''):
 
     print("Saving file and removing temp dirs")
 
+    dataset='qm9'
+    
     dataset_file = os.path.join(
         save_path, dataset, dataset + '_data_energy.npy')
     if not os.path.exists(os.path.join(save_path, dataset)):

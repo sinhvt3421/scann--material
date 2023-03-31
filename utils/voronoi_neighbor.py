@@ -1,4 +1,5 @@
 from pymatgen.analysis.local_env import VoronoiNN
+from pymatgen.core import Molecule, Structure
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 import pymatgen as pmt
@@ -21,11 +22,11 @@ def compute_voronoi_neighbor(system_atoms,system_coord,lattice, d_thresh=4.0, w_
 
     if lattice is not None:
         lattice_info = lattice
-        struct = pmt.Structure(lattice=lattice_info, coords_are_cartesian=True,
+        struct = Structure(lattice=lattice_info, coords_are_cartesian=True,
                            coords=system_coord, species=system_atoms)
         cutoff = 13
     else:
-        struct = pmt.Molecule(system_atoms, system_coord)
+        struct = Molecule(system_atoms, system_coord)
         size = 30
         struct = struct.get_boxed_structure(size, size, size, reorder=False)
         cutoff = 13 + size

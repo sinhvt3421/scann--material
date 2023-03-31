@@ -47,7 +47,8 @@ class SCANNet:
 
     def init_model(self, pretrained=''):
         if pretrained:
-            print('load pretrained model from ', self.config['hyper']['pretrained'])
+            print('load pretrained model from ',
+                  self.config['hyper']['pretrained'])
             self.model = create_model_pretrained(self.config)
         else:
             self.model = create_model(self.config)
@@ -68,7 +69,7 @@ class SCANNet:
 
     def prepare_dataset(self):
 
-        data_energy, data_neighbor = load_dataset(use_ref=self.config['hyper']['use_ref'], 
+        data_energy, data_neighbor = load_dataset(use_ref=self.config['hyper']['use_ref'],
                                                   use_ring=self.config['model']['use_ring'],
                                                   dataset=self.config['hyper']['data_energy_path'],
                                                   dataset_neighbor=self.config['hyper']['data_nei_path'],
@@ -97,16 +98,18 @@ class SCANNet:
     def create_callbacks(self):
 
         callbacks = []
-        callbacks.append(ModelCheckpoint(filepath='{}_{}/models/model.h5'.format(self.config['hyper']['save_path'], self.config['hyper']['target']),
+        callbacks.append(ModelCheckpoint(filepath='{}_{}/models/model_{}.h5'.format(self.config['hyper']['save_path'], 
+                                                                                    self.config['hyper']['target'],
+                                                                                    self.config['hyper']['target']),
                                          monitor='val_mae',
                                          save_weights_only=False, verbose=2,
                                          save_best_only=True))
 
-        callbacks.append(EarlyStopping(monitor='val_mae', patience=200))
+        callbacks.append(EarlyStopping(monitor='val_mae', patience=100))
 
         lr = SGDRC(lr_min=self.config['hyper']['min_lr'],
                    lr_max=self.config['hyper']['lr'], t0=50, tmult=2,
-                   lr_max_compression=1.2, trigger_val_mae=80)
+                   lr_max_compression=1.2, trigger_val_mae=100)
         sgdr = LearningRateScheduler(lr.lr_scheduler)
 
         callbacks.append(lr)
@@ -119,7 +122,7 @@ class SCANNet:
         if not os.path.exists('{}_{}/models/'.format(self.config['hyper']['save_path'], self.config['hyper']['target'])):
             os.makedirs(
                 '{}_{}/models/'.format(self.config['hyper']['save_path'], self.config['hyper']['target']))
-            
+
         callbacks = self.create_callbacks()
 
         yaml.safe_dump(self.config, open('{}_{}/config.yaml'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), 'w'),
@@ -138,8 +141,10 @@ class SCANNet:
 
     def evaluate(self):
         # Predict for testdata
-        print('Load best validation weight for predicting testset')
-        self.model = load_model('{}_{}/models/model.h5'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), custom_objects=_CUSTOM_OBJECTS)
+        if not hasattr(self,'model'):
+            print('Load best validation weight for predicting testset')
+            self.model = load_model('{}_{}/models/model.h5'.format(
+                self.config['hyper']['save_path'], self.config['hyper']['target']), custom_objects=_CUSTOM_OBJECTS)
 
         y_predict = []
         y = []
@@ -153,25 +158,27 @@ class SCANNet:
         print('Result for testset: R2 score: ', r2_score(y, y_predict),
               ' and MAE: ', mean_absolute_error(y, y_predict))
 
-        save_data = [y_predict, y, self.hist.history]
+        if hasattr(self,'hist'):
+            save_data = [y_predict, y, self.hist.history]
+            
+            np.save(
+                '{}_{}/hist_data.npy'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), save_data)
 
-        np.save(
-            '{}_{}/hist_data.npy'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), save_data)
+            with open('{}_{}/report.txt'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), 'w') as f:
+                f.write('Training MAE: ' +
+                        str(min(self.hist.history['mae'])) + '\n')
+                f.write('Val MAE: ' +
+                        str(min(self.hist.history['val_mae'])) + '\n')
+                f.write('Test MAE: ' + str(mean_absolute_error(y, y_predict)) +
+                        ', Test R2: ' + str(r2_score(y, y_predict)))
 
-        with open('{}_{}/report.txt'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), 'w') as f:
-            f.write('Training MAE: ' +
-                    str(min(self.hist.history['mae'])) + '\n')
-            f.write('Val MAE: ' +
-                    str(min(self.hist.history['val_mae'])) + '\n')
-            f.write('Test MAE: ' + str(mean_absolute_error(y, y_predict)) +
-                    ', Test R2: ' + str(r2_score(y, y_predict)))
-
-        print('Saved model record for dataset')
+            print('Saved model record for dataset')
 
 
 def create_model_pretrained(config):
 
-    model = load_model(config['hyper']['pretrained'], custom_objects=_CUSTOM_OBJECTS)
+    model = load_model(config['hyper']['pretrained'],
+                       custom_objects=_CUSTOM_OBJECTS)
     model.summary()
 
     return model

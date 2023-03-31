@@ -1,18 +1,14 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-from sklearn.metrics import r2_score, mean_absolute_error
-from utils.general import *
-from utils.datagenerator import DataIterator
-from scannet.layers import SGDRC
+import tensorflow as tf
 from scannet.models import SCANNet
 import time
 import argparse
 import yaml
 import random
 import numpy as np
-from tensorflow.keras.callbacks import *
-import tensorflow as tf
+
 
 
 def set_seed(seed=2134):
@@ -45,12 +41,14 @@ def main(args):
     print('Load data for dataset: ', args.dataset)
     scannet.prepare_dataset()
 
-    print('Start training model')
-    start = time.time()
-    scannet.train(3)
+    if args.mode == 'train':
+        print('Start Model training')
+        start = time.time()
+        scannet.train(500)
 
-    print('Training time: ', time.time()-start)
-
+        print('Training time: ', time.time()-start)
+    
+    print('Start Model evaluation:')
     # Evaluate for testset
     scannet.evaluate()
 
@@ -72,6 +70,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--pretrained', type=str, default='',
                         help='Path to pretrained model (optional)')
+    
+    parser.add_argument('--mode', type=str, default='train',
+                        help='Whether to train new model or just run the evaluation on pretrained model')
 
     args = parser.parse_args()
     main(args)

@@ -38,7 +38,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('dataset', type=str, default='qm9',
-                        help='Target dataset')
+                        help='Target dataset, support [qm9, fullerence, ptgraphene, smfe]')
     
     parser.add_argument('save_path', type=str, default='processed_data',
                         help='Whether to save processed data')
@@ -53,7 +53,7 @@ if __name__ == "__main__":
                         help='Cutoff weight')
 
     parser.add_argument('--p', type=int, default=8,
-                        help='Cutoff weight')
+                        help='Using multiprocess (8 pool) for faster computing')
 
     args = parser.parse_args()
     main(args)

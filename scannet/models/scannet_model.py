@@ -1,10 +1,23 @@
 import tensorflow as tf
-import numpy as np
+from tensorflow.keras.models import load_model
 import tensorflow.keras.backend as K
 from tensorflow.keras import regularizers
+from tensorflow.keras.layers import Embedding, Dense, Dropout, Input, Lambda
+
 from scannet.layers import *
 from scannet.losses import *
-from tensorflow.keras.layers import Embedding, Dense, Dropout, Input, Lambda
+from scannet.layers import _CUSTOM_OBJECTS
+
+from utils.general import load_dataset, split_data
+from utils.datagenerator import DataIterator
+from tensorflow.keras.callbacks import *
+
+import numpy as np
+from sklearn.metrics import r2_score, mean_absolute_error
+import os
+import time
+import yaml
+import gc
 
 
 class SCANNet:
@@ -27,49 +40,141 @@ class SCANNet:
                     num_head: total head for attention as in Transformer, set to 1 will not using head attention
                     scale: attention scale factor, default to 0.5. 
         """
-
-        self.model = create_model(config)
-
-        self.model.compile(loss=root_mean_squared_error,
-                           optimizer=tf.keras.optimizers.Adam(config['hyper']['lr'],
-                                                              gradient_transformers=[AutoClipper(10)]),
-                           metrics=['mae', r2_square])
+        self.config = config
 
     def __getattr__(self, p):
         return getattr(self.model, p)
 
+    def init_model(self, pretrained=''):
+        if pretrained:
+            print('load pretrained model from ', self.config['hyper']['pretrained'])
+            self.model = create_model_pretrained(self.config)
+        else:
+            self.model = create_model(self.config)
+
+        self.model.compile(loss=root_mean_squared_error,
+                           optimizer=tf.keras.optimizers.Adam(self.config['hyper']['lr'],
+                                                              gradient_transformers=[AutoClipper(10)]),
+                           metrics=['mae', r2_square])
+
     @classmethod
     def load_model_infer(cls, path):
-        from scannet.layers import _CUSTOM_OBJECTS
-
-        model = tf.keras.models.load_model(
-            path, custom_objects=_CUSTOM_OBJECTS)
+        model = load_model(path, custom_objects=_CUSTOM_OBJECTS)
 
         attention_output = model.get_layer('global_attention').output[0]
         model_infer = tf.keras.Model(inputs=model.input, outputs=[
                                      model.output, attention_output])
         return model_infer
 
-    @classmethod
-    def load_model(cls, path):
-        from scannet.layers import _CUSTOM_OBJECTS
+    def prepare_dataset(self):
 
-        model = tf.keras.models.load_model(
-            path, custom_objects=_CUSTOM_OBJECTS)
+        data_energy, data_neighbor = load_dataset(use_ref=self.config['hyper']['use_ref'], 
+                                                  use_ring=self.config['model']['use_ring'],
+                                                  dataset=self.config['hyper']['data_energy_path'],
+                                                  dataset_neighbor=self.config['hyper']['data_nei_path'],
+                                                  target_prop=self.config['hyper']['target'])
 
-        return model
+        self.config['hyper']['data_size'] = len(data_energy)
+
+        train, valid, test, extra = split_data(len_data=len(data_energy),
+                                               test_percent=self.config['hyper']['test_percent'],
+                                               train_size=self.config['hyper']['train_size'],
+                                               test_size=self.config['hyper']['test_size'])
+
+        assert (len(extra) == 0), 'Split was inexact {} {} {} {}'.format(
+            len(train), len(valid), len(test), len(extra))
+
+        print("Number of train data : ", len(train), " , Number of valid data: ", len(valid),
+              " , Number of test data: ", len(test))
+
+        self.trainIter, self.validIter, self.testIter = [DataIterator(batch_size=self.config['hyper']['batch_size'],
+                                                                      data_neighbor=data_neighbor[indices],
+                                                                      data_energy=data_energy[indices],
+                                                                      use_ring=self.config['model']['use_ring'],
+                                                                      shuffle=(len(indices) == len(train)))
+                                                         for indices in (train, valid, test)]
+
+    def create_callbacks(self):
+
+        callbacks = []
+        callbacks.append(ModelCheckpoint(filepath='{}_{}/models/model.h5'.format(self.config['hyper']['save_path'], self.config['hyper']['target']),
+                                         monitor='val_mae',
+                                         save_weights_only=False, verbose=2,
+                                         save_best_only=True))
+
+        callbacks.append(EarlyStopping(monitor='val_mae', patience=200))
+
+        lr = SGDRC(lr_min=self.config['hyper']['min_lr'],
+                   lr_max=self.config['hyper']['lr'], t0=50, tmult=2,
+                   lr_max_compression=1.2, trigger_val_mae=80)
+        sgdr = LearningRateScheduler(lr.lr_scheduler)
+
+        callbacks.append(lr)
+        callbacks.append(sgdr)
+
+        return callbacks
+
+    def train(self, epochs=1000):
+
+        if not os.path.exists('{}_{}/models/'.format(self.config['hyper']['save_path'], self.config['hyper']['target'])):
+            os.makedirs(
+                '{}_{}/models/'.format(self.config['hyper']['save_path'], self.config['hyper']['target']))
+            
+        callbacks = self.create_callbacks()
+
+        yaml.safe_dump(self.config, open('{}_{}/config.yaml'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), 'w'),
+                       default_flow_style=False)
+
+        self.hist = self.model.fit(self.trainIter, epochs=epochs,
+                                   validation_data=self.validIter,
+                                   callbacks=callbacks,
+                                   verbose=2, shuffle=False,
+                                   use_multiprocessing=True,
+                                   workers=4)
+
+        tf.keras.backend.clear_session()
+        del self.model
+        gc.collect()
+
+    def evaluate(self):
+        # Predict for testdata
+        print('Load best validation weight for predicting testset')
+        self.model = load_model('{}_{}/models/model.h5'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), custom_objects=_CUSTOM_OBJECTS)
+
+        y_predict = []
+        y = []
+        for i in range(len(self.testIter)):
+            inputs, target = self.testIter.__getitem__(i)
+            output = self.model.predict(inputs)
+
+            y.extend(list(target))
+            y_predict.extend(list(np.squeeze(output)))
+
+        print('Result for testset: R2 score: ', r2_score(y, y_predict),
+              ' and MAE: ', mean_absolute_error(y, y_predict))
+
+        save_data = [y_predict, y, self.hist.history]
+
+        np.save(
+            '{}_{}/hist_data.npy'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), save_data)
+
+        with open('{}_{}/report.txt'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), 'w') as f:
+            f.write('Training MAE: ' +
+                    str(min(self.hist.history['mae'])) + '\n')
+            f.write('Val MAE: ' +
+                    str(min(self.hist.history['val_mae'])) + '\n')
+            f.write('Test MAE: ' + str(mean_absolute_error(y, y_predict)) +
+                    ', Test R2: ' + str(r2_score(y, y_predict)))
+
+        print('Saved model record for dataset')
 
 
-def gather_shape(x):
-    x_shape = tf.shape(x)
-    B, M, N = x_shape[0], x_shape[1], x_shape[2]
+def create_model_pretrained(config):
 
-    range_B = tf.range(B)[:, None, None, None]
-    range_B_t = tf.tile(range_B, [1, M, N, 1])
-    x_indices = tf.concat(
-        [range_B_t, tf.expand_dims(x, -1)], -1)
+    model = load_model(config['hyper']['pretrained'], custom_objects=_CUSTOM_OBJECTS)
+    model.summary()
 
-    return x_indices
+    return model
 
 
 def create_model(config):

@@ -26,120 +26,33 @@ def set_seed(seed=2134):
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(seed)
 
-
 def main(args):
 
     set_seed(2134)
 
-    start = time.time()
     config = yaml.safe_load(open(args.dataset))
-
-    config['model']['use_ring'] = args.use_ring
-    config['hyper']['use_ref'] = args.use_ref
-    config['hyper']['target'] = args.target
-
     print('Create model use Ring Information: ', args.use_ring)
 
-    if args.pretrained:
-        print('load pretrained model')
-        model = SCANNet.load_model(config['hyper']['pretrained'])
-    else:
-        model = SCANNet(config)
+    config['model']['use_ring'] = args.use_ring
+
+    config['hyper']['use_ref'] = args.use_ref
+    config['hyper']['target'] = args.target
+    config['hyper']['pretrained'] = args.pretrained
+
+    scannet = SCANNet(config)
+    scannet.init_model(args.pretrained)
 
     print('Load data for dataset: ', args.dataset)
-    data_energy, data_neighbor = load_dataset(use_ref=args.use_ref, use_ring=args.use_ring,
-                                              dataset=config['hyper']['data_energy_path'],
-                                              dataset_neighbor=config['hyper']['data_nei_path'],
-                                              target_prop=args.target)
+    scannet.prepare_dataset()
 
-    config['hyper']['data_size'] = len(data_energy)
-
-    train, valid, test, extra = split_data(len_data=len(data_energy),
-                                           test_percent=config['hyper']['test_percent'],
-                                           train_size=config['hyper']['train_size'],
-                                           test_size=config['hyper']['test_size'])
-
-    assert (len(extra) == 0), 'Split was inexact {} {} {} {}'.format(
-        len(train), len(valid), len(test), len(extra))
-
-    print("Number of train data : ", len(train), " , Number of valid data: ", len(valid),
-          " , Number of test data: ", len(test))
-
-    trainIter, validIter, testIter = [DataIterator(batch_size=config['hyper']['batch_size'],
-                                                   data_neighbor=data_neighbor[indices],
-                                                   data_energy=data_energy[indices],
-                                                   converter=True,
-                                                   use_ring=args.use_ring,
-                                                   shuffle=indices == train)
-                                      for indices in (train, valid, test)]
-
-    if not os.path.exists('{}_{}/models/'.format(config['hyper']['save_path'], args.target)):
-        os.makedirs(
-            '{}_{}/models/'.format(config['hyper']['save_path'], args.target))
-
-    callbacks = []
-    callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath='{}_{}/models/model.h5'.format(config['hyper']['save_path'], args.target),
-                                                        monitor='val_mae',
-                                                        save_weights_only=False, verbose=2,
-                                                        save_best_only=True))
-
-    early_stop = tf.keras.callbacks.EarlyStopping(
-        monitor='val_mae', patience=200)
-
-    lr = SGDRC(lr_min=config['hyper']['min_lr'],
-               lr_max=config['hyper']['lr'], t0=50, tmult=2,
-               lr_max_compression=1.2, trigger_val_mae=80)
-
-    sgdr = LearningRateScheduler(lr.lr_scheduler)
-    callbacks.append(sgdr)
-
-    callbacks.append(lr)
-    callbacks.append(early_stop)
-
-    yaml.safe_dump(config, open('{}_{}/config.yaml'.format(config['hyper']['save_path'],args.target), 'w'),
-                   default_flow_style=False)
-
-    hist = model.fit(trainIter, epochs=1000,
-                     validation_data=validIter,
-                     callbacks=callbacks,
-                     verbose=2, shuffle=False,
-                     use_multiprocessing=True,
-                     workers=4)
+    print('Start training model')
+    start = time.time()
+    scannet.train(3)
 
     print('Training time: ', time.time()-start)
 
-    tf.keras.backend.clear_session()
-    del model
-
-    # Predict for testdata
-    print('Load best validation weight for predicting testset')
-    model = SCANNet.load_model(
-        '{}_{}/models/model.h5'.format(config['hyper']['save_path'], args.target))
-
-    y_predict = []
-    y = []
-    for i in range(len(testIter)):
-        inputs, target = testIter.__getitem__(i)
-        output = model.predict(inputs)
-
-        y.extend(list(target))
-        y_predict.extend(list(np.squeeze(output)))
-
-    print('Result for testset: R2 score: ', r2_score(y, y_predict),
-          ' and MAE: ', mean_absolute_error(y, y_predict))
-
-    save_data = [y_predict, y, test, hist.history]
-
-    np.save(
-        '{}_{}/hist_data.npy'.format(config['hyper']['save_path'], args.target), save_data)
-
-    with open('{}_{}/report.txt'.format(config['hyper']['save_path'], args.target), 'w') as f:
-        f.write('Training MAE: ' + str(min(hist.history['mae'])) + '\n')
-        f.write('Val MAE: ' + str(min(hist.history['val_mae'])) + '\n')
-        f.write('Test MAE: ' + str(mean_absolute_error(y, y_predict)) +
-                ', Test R2: ' + str(r2_score(y, y_predict)))
-
-    print('Saved model record for dataset')
+    # Evaluate for testset
+    scannet.evaluate()
 
 
 if __name__ == "__main__":
@@ -158,7 +71,7 @@ if __name__ == "__main__":
                         help='Whether to use ref optimization energy')
 
     parser.add_argument('--pretrained', type=str, default='',
-                        help='Whether to use pretrained model')
+                        help='Path to pretrained model (optional)')
 
     args = parser.parse_args()
     main(args)

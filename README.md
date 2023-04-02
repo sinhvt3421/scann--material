@@ -9,7 +9,8 @@
 <a name="introduction"></a>
 
 # Introduction
-This repository is the official implementation of [Deep learning reveals where to pay attention to for interpreting the structure-property relationship of materials](https://).
+This repository is the official implementation of [Deep learning reveals key aspects to help interpret the structure–property
+relationships of materials](https://).
 
 Please cite us as
 
@@ -51,7 +52,7 @@ the [notebooks directory](notebooks) for Jupyter notebooks with more detailed co
 
 ## Using pre-built models
 
-In our work, we have already built models for the QM9 data set. The model is provided as serialized HDF5+JSON files. 
+In our work, we have already built models for the QM9 data set [1]. The model is provided as serialized HDF5+JSON files. 
 
 * QM9 molecule data:
   * HOMO: Highest occupied molecular orbital energy
@@ -101,7 +102,7 @@ python preprocess_data.py fullerence processed_data --data_path='experiments/ful
 python train.py homo configs/model_fullerence.yaml --use_ring=True --pretrained=..../qm9/homo/models/model.h5
 ```
 ## Model inference
-The code ```predict_files.py``` supports loading a ```xyz``` file and predicting the properties with the pretrained models. The information about global attention (GA) score for interpreting the structure-property relationship is also provided and saved into ```xyz``` format. Please use a visualization tool such as Ovito for showing the results.
+The code ```predict_files.py``` supports loading a ```xyz``` file and predicting the properties with the pretrained models. The information about global attention (GA) score for interpreting the structure-property relationship is also provided and saved into ```xyz``` format. Please use a visualization tool such as Ovito [2] for showing the results.
 ```
 python predict_files.py ..../models.h5 save_path.../ experiments/molecules/Dimethyl_fumarate.xyz
 ``` 
@@ -109,3 +110,10 @@ python predict_files.py ..../models.h5 save_path.../ experiments/molecules/Dimet
 <div align='center'><strong>Figure 2. Example of SCANNet prediction for LUMO property.</strong></div>
 
 <a name="usage"></a>
+
+<a name="references"></a>
+# References
+
+[1] Ramakrishnan, R., Dral, P., Rupp, M. et al. Quantum chemistry structures and properties of 134 kilo molecules. Sci Data 1, 140022 (2014). https://doi.org/10.1038/sdata.2014.22 
+
+[2] A. Stukowski, Visualization and Analysis of Atomistic Simulation Data with OVITO–the Open Visualization Tool, Model. Simul. Mater. Sci. Eng. 18, 15012 (2009). [doi:10.1088/0965-0393/18/1/015012](https://stacks.iop.org/0965-0393/18/015012)

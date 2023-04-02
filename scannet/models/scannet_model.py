@@ -42,9 +42,6 @@ class SCANNet:
         """
         self.config = config
 
-    def __getattr__(self, p):
-        return getattr(self.model, p)
-
     def init_model(self, pretrained=''):
         if pretrained:
             print('load pretrained model from ',
@@ -67,7 +64,7 @@ class SCANNet:
                                      model.output, attention_output])
         return model_infer
 
-    def prepare_dataset(self):
+    def prepare_dataset(self, split=True):
 
         data_energy, data_neighbor = load_dataset(use_ref=self.config['hyper']['use_ref'],
                                                   use_ring=self.config['model']['use_ring'],
@@ -76,29 +73,35 @@ class SCANNet:
                                                   target_prop=self.config['hyper']['target'])
 
         self.config['hyper']['data_size'] = len(data_energy)
+        if split:
+            train, valid, test, extra = split_data(len_data=len(data_energy),
+                                                   test_percent=self.config['hyper']['test_percent'],
+                                                   train_size=self.config['hyper']['train_size'],
+                                                   test_size=self.config['hyper']['test_size'])
 
-        train, valid, test, extra = split_data(len_data=len(data_energy),
-                                               test_percent=self.config['hyper']['test_percent'],
-                                               train_size=self.config['hyper']['train_size'],
-                                               test_size=self.config['hyper']['test_size'])
+            assert (len(extra) == 0), 'Split was inexact {} {} {} {}'.format(
+                len(train), len(valid), len(test), len(extra))
 
-        assert (len(extra) == 0), 'Split was inexact {} {} {} {}'.format(
-            len(train), len(valid), len(test), len(extra))
+            print("Number of train data : ", len(train), " , Number of valid data: ", len(valid),
+                  " , Number of test data: ", len(test))
 
-        print("Number of train data : ", len(train), " , Number of valid data: ", len(valid),
-              " , Number of test data: ", len(test))
-
-        self.trainIter, self.validIter, self.testIter = [DataIterator(batch_size=self.config['hyper']['batch_size'],
-                                                                      data_neighbor=data_neighbor[indices],
-                                                                      data_energy=data_energy[indices],
-                                                                      use_ring=self.config['model']['use_ring'],
-                                                                      shuffle=(len(indices) == len(train)))
-                                                         for indices in (train, valid, test)]
+            self.trainIter, self.validIter, self.testIter = [DataIterator(batch_size=self.config['hyper']['batch_size'],
+                                                                          data_neighbor=data_neighbor[indices],
+                                                                          data_energy=data_energy[indices],
+                                                                          use_ring=self.config['model']['use_ring'],
+                                                                          shuffle=(len(indices) == len(train)))
+                                                             for indices in (train, valid, test)]
+        else:
+            indices = range(self.config['hyper']['data_size'])
+            self.dataIter = DataIterator(batch_size=self.config['hyper']['batch_size'],
+                                         data_neighbor=data_neighbor[indices],
+                                         data_energy=data_energy[indices],
+                                         use_ring=self.config['model']['use_ring'])
 
     def create_callbacks(self):
 
         callbacks = []
-        callbacks.append(ModelCheckpoint(filepath='{}_{}/models/model_{}.h5'.format(self.config['hyper']['save_path'], 
+        callbacks.append(ModelCheckpoint(filepath='{}_{}/models/model_{}.h5'.format(self.config['hyper']['save_path'],
                                                                                     self.config['hyper']['target'],
                                                                                     self.config['hyper']['target']),
                                          monitor='val_mae',
@@ -141,10 +144,10 @@ class SCANNet:
 
     def evaluate(self):
         # Predict for testdata
-        if not hasattr(self,'model'):
+        if not hasattr(self, 'model'):
             print('Load best validation weight for predicting testset')
-            self.model = load_model('{}_{}/models/model.h5'.format(
-                self.config['hyper']['save_path'], self.config['hyper']['target']), custom_objects=_CUSTOM_OBJECTS)
+            self.model = load_model('{}_{}/models/model_{}.h5'.format(
+                self.config['hyper']['save_path'], self.config['hyper']['target'], self.config['hyper']['target']), custom_objects=_CUSTOM_OBJECTS)
 
         y_predict = []
         y = []
@@ -158,9 +161,9 @@ class SCANNet:
         print('Result for testset: R2 score: ', r2_score(y, y_predict),
               ' and MAE: ', mean_absolute_error(y, y_predict))
 
-        if hasattr(self,'hist'):
+        if hasattr(self, 'hist'):
             save_data = [y_predict, y, self.hist.history]
-            
+
             np.save(
                 '{}_{}/hist_data.npy'.format(self.config['hyper']['save_path'], self.config['hyper']['target']), save_data)
 

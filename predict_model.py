@@ -17,7 +17,7 @@ def main(args):
 
     print('Load pretrained weight for target ', config['hyper']['target'])
     model = SCANNet.load_model_infer(os.path.join(
-        args.trained_model, 'models', 'model.h5'))
+        args.trained_model, 'models', 'model_{}.h5'.format(config['hyper']['target'])))
 
     print('Load data for trained model: ', config['hyper']['data_energy_path'])
     data_energy, data_neighbor = load_dataset(use_ref=config['hyper']['use_ref'],

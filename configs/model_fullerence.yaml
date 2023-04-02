@@ -18,7 +18,7 @@ hyper:
   data_size: 3000
   data_nei_path: 'processed_data/fullerence/fullerence_data_neighbor_dt4.0_wt0.2.npy'
   data_energy_path: 'processed_data/fullerence/fullerence_data_energy.npy'
-  lr: 0.0001
+  lr: 0.0005
   min_lr: 0.00005
-  save_path: 'trained_models/paper_report/model_fullerence_att8_drop'
-  pretrained: 'trained_models/model_qm9_att8_ring_ga_nov_key_drop_lumo/models/model.h5'
+  save_path: 'trained_models/model_fullerence'
+  pretrained: ''

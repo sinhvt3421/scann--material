@@ -38,7 +38,7 @@ def main(args):
     scannet = SCANNet(config)
     scannet.init_model(args.pretrained)
 
-    print('Load data for dataset: ', args.dataset)
+    print('Load data for dataset: ', args.dataset, ' with target: ', args.target)
     scannet.prepare_dataset()
 
     if args.mode == 'train':

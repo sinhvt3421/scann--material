@@ -16,9 +16,9 @@ hyper:
   train_size: ''
   test_size: ''
   data_size: 3381
-  data_nei_path: 'processed_data/smfe12/smfe12_data_neighbor_dt6.0_wt0.1.npy'
-  data_energy_path: 'processed_data/smfe12/smfe12_data_energy.npy'
+  data_nei_path: 'processed_data/smfe/smfe_data_neighbor_dt6.0_wt0.1.npy'
+  data_energy_path: 'processed_data/smfe/smfe_data_energy.npy'
   lr: 0.0005
   min_lr: 0.0001
-  save_path: 'trained_models/paper_report/model_smfe12_att8_drop'
+  save_path: 'trained_models/model_smfe'
   pretrained: ''

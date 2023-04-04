@@ -9,8 +9,6 @@ import yaml
 import random
 import numpy as np
 
-
-
 def set_seed(seed=2134):
     # tf.keras.utils.set_random_seed(seed)
     random.seed(seed)
@@ -35,8 +33,7 @@ def main(args):
     config['hyper']['target'] = args.target
     config['hyper']['pretrained'] = args.pretrained
 
-    scannet = SCANNet(config)
-    scannet.init_model(args.pretrained)
+    scannet = SCANNet(config,args.pretrained)
 
     print('Load data for dataset: ', args.dataset, ' with target: ', args.target)
     scannet.prepare_dataset()

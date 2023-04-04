@@ -25,7 +25,7 @@ class SCANNet:
         Implements main SCANNet 
     """
 
-    def __init__(self, config):
+    def __init__(self, config=None, pretrained=''):
         """
         Args:
             config:
@@ -41,19 +41,15 @@ class SCANNet:
                     scale: attention scale factor, default to 0.5. 
         """
         self.config = config
+        self.model = None
 
-    def init_model(self, pretrained=''):
         if pretrained:
-            print('load pretrained model from ',
-                  self.config['hyper']['pretrained'])
-            self.model = create_model_pretrained(self.config)
+            print('load pretrained model from ', pretrained)
+            self.model = create_model_pretrained(pretrained)
+            self.config['hyper']['pretrained'] = pretrained
+            
         else:
             self.model = create_model(self.config)
-
-        self.model.compile(loss=root_mean_squared_error,
-                           optimizer=tf.keras.optimizers.Adam(self.config['hyper']['lr'],
-                                                              gradient_transformers=[AutoClipper(10)]),
-                           metrics=['mae', r2_square])
 
     @classmethod
     def load_model_infer(cls, path):
@@ -63,7 +59,7 @@ class SCANNet:
         model_infer = tf.keras.Model(inputs=model.input, outputs=[
                                      model.output, attention_output])
         return model_infer
-
+        
     def prepare_dataset(self, split=True):
 
         data_energy, data_neighbor = load_dataset(use_ref=self.config['hyper']['use_ref'],
@@ -121,6 +117,9 @@ class SCANNet:
         return callbacks
 
     def train(self, epochs=1000):
+        self.model.compile(loss=root_mean_squared_error, optimizer=tf.keras.optimizers.Adam(self.config['hyper']['lr']),
+                                                                                            # gradient_transformers=[AutoClipper(10)]),
+                           metrics=['mae', r2_square])
 
         if not os.path.exists('{}_{}/models/'.format(self.config['hyper']['save_path'], self.config['hyper']['target'])):
             os.makedirs(
@@ -176,7 +175,7 @@ class SCANNet:
                         ', Test R2: ' + str(r2_score(y, y_predict)))
 
             print('Saved model record for dataset')
-
+        
 
 def create_model_pretrained(config):
 
@@ -188,10 +187,13 @@ def create_model_pretrained(config):
 
 
 def create_model(config):
+    cfm = config['model']
 
+    # Atom Inputs
     atomic = Input(name='atomic', shape=(None,), dtype='int32')
     atom_mask = Input(shape=[None, 1], name='atom_mask')
 
+    # Neighbor Inputs
     neighbor = Input(name='neighbors', shape=(None, None), dtype='int32')
     neighbor_mask = Input(name='neighbor_mask',
                           shape=(None, None), dtype='float32')
@@ -201,18 +203,11 @@ def create_model(config):
     neighbor_distance = Input(name='neighbor_distance', shape=(
         None, None, 20), dtype='float32')
 
-    inputs = []
-    cfm = config['model']
-    if cfm['use_ring']:
-        shape = 2
-        ring_info = Input(name='ring_aromatic', shape=(
-            None, shape), dtype='float32')
-
-        inputs = [atomic,  atom_mask, neighbor, neighbor_mask,
-                  neighbor_weight, neighbor_distance, ring_info]
-    else:
-        inputs = [atomic,  atom_mask, neighbor,
+    inputs = [atomic,  atom_mask, neighbor,
                   neighbor_mask, neighbor_weight, neighbor_distance]
+    if cfm['use_ring']:
+        ring_info = Input(name='ring_aromatic', shape=(None, 2), dtype='float32')
+        inputs.append(ring_info)
 
     # Embedding atom and extra information as ring, aromatic
     centers = Embedding(cfm['n_atoms'],

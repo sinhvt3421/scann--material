@@ -16,9 +16,9 @@ hyper:
   train_size: ''
   test_size: ''
   data_size: 3000
-  data_nei_path: 'processed_data/fullerence/fullerence_data_neighbor_dt4.0_wt0.2.npy'
-  data_energy_path: 'processed_data/fullerence/fullerence_data_energy.npy'
+  data_nei_path: 'processed_data/fullerene/fullerene_data_neighbor_dt4.0_wt0.2.npy'
+  data_energy_path: 'processed_data/fullerene/fullerene_data_energy.npy'
   lr: 0.0005
   min_lr: 0.00005
-  save_path: 'trained_models/model_fullerence'
+  save_path: 'trained_models/model_fullerene'
   pretrained: ''

@@ -13,10 +13,15 @@ def init_dataset(dataset='qm9', data_path='', save_path='', d_t=4.0, w_t=0.2, p=
         if not os.path.exists(os.path.join(save_path, dataset)):
             process_qm9(save_path)
 
-    if dataset == 'fullerence':
-        print('Init dataset Fullerence:')
+    if dataset == 'fullerene':
+        print('Init dataset Fullerene:')
         if not os.path.exists(os.path.join(save_path, dataset)):
-            process_fullerence(data_path, save_path)
+            process_fullerene(data_path, save_path)
+    
+    if dataset == 'ptgp':
+        print('Init dataset Pt/Graphene:')
+        if not os.path.exists(os.path.join(save_path, dataset)):
+            process_gp(data_path, save_path)
 
     if dataset == 'smfe':
         print('Init dataset SmFe12:')
@@ -38,12 +43,12 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('dataset', type=str, default='qm9',
-                        help='Target dataset, support [qm9, fullerence, ptgraphene, smfe]')
+                        help='Target dataset, support [qm9, fullerene, ptgp, smfe]')
     
     parser.add_argument('save_path', type=str, default='processed_data',
                         help='Whether to save processed data')
 
-    parser.add_argument('--data_path', type=str, default='experiments/fullerence',
+    parser.add_argument('--data_path', type=str, default='experiments/fullerene',
                         help='Whether to load xyz data')
     
     parser.add_argument('--dt', type=float, default=4.0,

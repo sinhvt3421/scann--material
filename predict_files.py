@@ -5,7 +5,7 @@ import pickle
 import argparse
 import yaml
 import numpy as np
-from utils.general import process_xyz, prepare_input
+from utils.general import process_xyz_pmt, prepare_input_pmt
 from scannet.models import SCANNet
 
 def main(args):
@@ -13,14 +13,13 @@ def main(args):
         open(os.path.join(args.trained_model, 'config.yaml')))
 
     print('Reading input from file: ', args.file_name)
-    struct = process_xyz(args.file_name)
+    struct = process_xyz_pmt(args.file_name)
 
-    inputs = prepare_input(
-        struct, use_ring=config['model']['use_ring'], use_hyp=config['model']['use_hyp'])
+    inputs = prepare_input_pmt(struct)
     
     print('Load pretrained weight for target ', config['hyper']['target'])
     model = SCANNet.load_model_infer(os.path.join(
-        args.trained_model, 'models', 'model.h5'))
+        args.trained_model, 'model_{}.h5'.format(config['hyper']['target'])))
 
     energy, attn_global= model.predict(inputs)
 

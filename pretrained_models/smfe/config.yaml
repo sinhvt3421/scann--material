@@ -1,0 +1,26 @@
+hyper:
+  batch_size: 128
+  data_energy_path: ../material-dl/processed_data/smfe/smfe_data_energy.npy
+  data_nei_path: ../material-dl/processed_data/smfe/smfe_data_neighbor_dt6.0_wt0.1.npy
+  data_size: 3831
+  lr: 0.0005
+  min_lr: 0.0001
+  pretrained: ''
+  save_path: trained_models/model_smfe
+  target: f_en
+  test_percent: 0.05
+  test_size: ''
+  train_size: ''
+  use_ref: false
+model:
+  dense_out: 128
+  embedding_dim: 48
+  global_dim: 128
+  local_dim: 128
+  n_atoms: 70
+  n_attention: 9
+  num_head: 8
+  scale: 0.5
+  use_attn_norm: true
+  use_ga_norm: true
+  use_ring: false

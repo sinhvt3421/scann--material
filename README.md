@@ -81,7 +81,7 @@ The MAEs on the various models are given below:
 
 The settings for experiments specific is placed in the folder [configs](configs)
 
-We provide an implementation for the QM9 experiments, the Fullerence-MD, the Pt/graphene-MD and SmFe12-MD experiments
+We provide an implementation for the QM9 experiments, the fullerene-MD, the Pt/graphene-MD and SmFe12-MD experiments
 
 # Basic usage
 ## Model training
@@ -95,11 +95,11 @@ After that, please change the config file located in folder [configs](configs) f
 python train.py homo configs/model_qm9.yaml --use_ring=True
 ```
 
-For training dataset Fullerence-MD with pretrained weights from QM9 dataset, please follow these steps. The pretrained model will be load based on the path from argument. 
+For training dataset fullerene-MD with pretrained weights from QM9 dataset, please follow these steps. The pretrained model will be load based on the path from argument. 
 ```
-python preprocess_data.py fullerence processed_data --data_path='experiments/fullerence' --dt=4.0 --wt=0.2
+python preprocess_data.py fullerene processed_data --data_path='experiments/fullerene' --dt=4.0 --wt=0.2
 ...
-python train.py homo configs/model_fullerence.yaml --use_ring=True --pretrained=..../qm9/homo/models/model.h5
+python train.py homo configs/model_fullerene.yaml --use_ring=True --pretrained=..../qm9/homo/models/model.h5
 ```
 ## Model inference
 The code ```predict_files.py``` supports loading a ```xyz``` file and predicting the properties with the pretrained models. The information about global attention (GA) score for interpreting the structure-property relationship is also provided and saved into ```xyz``` format. Please use a visualization tool such as Ovito [2] for showing the results.

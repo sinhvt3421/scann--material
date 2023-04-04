@@ -2,8 +2,9 @@ import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 from openbabel import pybel
-from utils.dataset import atoms_symbol
+from utils.dataset import atoms_symbol, atomic_numbers
 from .voronoi_neighbor import compute_voronoi_neighbor
+from pymatgen.core import Molecule, Structure
 
 
 def pad_sequence(sequences, maxlen=None, dtype='int32', value=0, padding='post'):
@@ -42,10 +43,11 @@ def pad_nested_sequences(sequences, max_len_1, max_len_2, dtype='int32', value=0
         np.ndarray: Padded sequences
     """
     pad_sq = [pad_sequence(
-        sq, padding='post', maxlen=max_len_1, value=value,dtype=dtype) for sq in sequences]
+        sq, padding='post', maxlen=max_len_1, value=value, dtype=dtype) for sq in sequences]
     pad_sq = pad_sequence(pad_sq, padding='post',
-                          maxlen=max_len_2, value=value,dtype=dtype)
+                          maxlen=max_len_2, value=value, dtype=dtype)
     return pad_sq
+
 
 class GaussianDistance():
     """
@@ -125,8 +127,8 @@ def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring
 
     for i, d in enumerate(data_full):
         if use_ring:
-                data_energy.append([d['Atomic'], d['Properties'][target_prop],
-                                    d['Ring'], d['Aromatic']])
+            data_energy.append([d['Atomic'], d['Properties'][target_prop],
+                                d['Ring'], d['Aromatic']])
         else:
             if use_ref:
                 data_energy.append([d['Atomic'],
@@ -142,7 +144,85 @@ def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring
     return data_energy, data_neighbor
 
 
-def process_xyz(file):
+def process_xyz_pmt(file):
+    """
+        The xyz file may contain Lattice="..." information for crystalline structures
+    Args:
+        file (str): path to xyz file
+
+    Returns:
+        Molecule/Structure: structure from pymatgen 
+    """
+    with open(file) as f:
+        lines = f.readlines()
+        if len(lines[1].split()) < 9:
+            lattice = None
+        else:
+            lattice = [[float(s) for s in lines[1].split('\"')[1].split()[i:i+3]]
+                       for i in range(0, 9, 3)]
+        atoms = []
+        coords = []
+        for line in lines[2:]:
+            data = line.split()
+            atom = data[0]
+            x, y, z = map(float, data[1:])
+            atoms.append(atom)
+            coords.append([x, y, z])
+
+        if lattice:
+            structure = Structure(lattice, atoms, coords,
+                                  coords_are_cartesian=True)
+        else:
+            structure = Molecule(atoms, coords)
+
+    return structure
+
+
+def prepare_input_pmt(struct, d_t=4.0, w_t=0.2):
+    """
+
+    Args:
+        struct (pmt.Molecule/Structure): structure from pymatgen
+        d_t (float, optional): Cut off threshold for distance. Defaults to 4.0 A.
+        w_t (float, optional): Cut off threshold for Voronoi weight. Defaults to 0.2.
+
+    Returns:
+        dict: input dictionary for model input
+    """
+    if type(struct) == Molecule:
+        cutoff = 30
+        centers = np.linspace(0, 4, 20)
+    else:
+        cutoff = 13
+        centers = np.linspace(0, 6, 20)
+
+    neighbors = compute_voronoi_neighbor(struct, cutoff, d_t, w_t)
+
+    GD = GaussianDistance(centers)
+
+    local_neighbor = np.array(
+        [pad_sequence([[n[1] for n in lc] for lc in neighbors], value=1000)], 'int32')
+    mask_local = (local_neighbor != 1000)
+    local_neighbor[local_neighbor == 1000] = 0
+
+    local_weight = np.array(
+        [pad_sequence([[n[2] for n in lc] for lc in neighbors], dtype='float32')])
+    local_distance = np.array([pad_sequence([GD.convert([float(n[3]) for n in lc])
+                                             for lc in neighbors], dtype='float32')])
+
+    atomics = np.array([atomic_numbers[x.species_string]
+                        for x in struct], 'int32')
+    mask_atom = (atomics != 0)
+
+    inputs = {'atomic': atomics, 'atom_mask': np.expand_dims(mask_atom, -1),
+              'neighbors': local_neighbor, 'neighbor_mask': mask_local,
+              'neighbor_weight': np.expand_dims(local_weight, -1),
+              'neighbor_distance': local_distance}
+
+    return inputs
+
+
+def process_mol_xyz(file):
     mol = next(pybel.readfile("xyz", file))
     atoms = [x.OBAtom for x in mol.atoms]
 
@@ -155,43 +235,44 @@ def process_xyz(file):
     aromatic = [1 if at.IsAromatic() else 0 for at in atoms]
 
     nstruct = {'Atoms': atomic_symbols, 'Atomic': atomics,
-                'Coords': coordinates, 'Ring': ring_info,
-                'Aromatic': aromatic}
+               'Coords': coordinates, 'Ring': ring_info,
+               'Aromatic': aromatic}
 
     return nstruct
 
 
-def prepare_input(struct, d_t=4.0, w_t=0.2, centers=np.linspace(0, 4, 20), use_ring=True):
+def prepare_mol(struct, d_t=4.0, w_t=0.2, centers=np.linspace(0, 4, 20), use_ring=True):
 
     system_atom = struct['Atoms']
     system_coord = np.array(struct['Coords'], dtype='float32')
-    lattice = None
 
-    neighbors = compute_voronoi_neighbor(system_atom, system_coord, lattice, d_t, w_t)
+    structure = Molecule(system_atom, system_coord)
+    neighbors = compute_voronoi_neighbor(structure, 30, d_t, w_t)
 
     GD = GaussianDistance(centers)
 
-    local_neighbor = np.array([pad_sequence([[n[1] for n in lc] for lc in neighbors],value=1000)],'int32')
+    local_neighbor = np.array(
+        [pad_sequence([[n[1] for n in lc] for lc in neighbors], value=1000)], 'int32')
     mask_local = (local_neighbor != 1000)
     local_neighbor[local_neighbor == 1000] = 0
 
-    local_weight = np.array([pad_sequence([[n[2] for n in lc] for lc in neighbors],dtype='float32')])
-    local_distance =  np.array([pad_sequence([GD.convert([float(n[3]) for n in lc])
-                           for lc in neighbors],dtype='float32')])
+    local_weight = np.array(
+        [pad_sequence([[n[2] for n in lc] for lc in neighbors], dtype='float32')])
+    local_distance = np.array([pad_sequence([GD.convert([float(n[3]) for n in lc])
+                                             for lc in neighbors], dtype='float32')])
 
-    atomics = np.array([struct['Atomic']],'int32')
+    atomics = np.array([struct['Atomic']], 'int32')
     mask_atom = (atomics != 0)
 
     if use_ring:
         extra_info = [np.stack([struct['Ring'], struct['Aromatic']], -1)]
-            
 
     inputs = {'atomic': atomics, 'atom_mask': np.expand_dims(mask_atom, -1),
-            'neighbors': local_neighbor, 'neighbor_mask': mask_local,
-            'neighbor_weight': np.expand_dims(local_weight, -1),
-            'neighbor_distance': local_distance}
+              'neighbors': local_neighbor, 'neighbor_mask': mask_local,
+              'neighbor_weight': np.expand_dims(local_weight, -1),
+              'neighbor_distance': local_distance}
 
     if use_ring:
-        inputs['ring_aromatic'] = np.array(extra_info,'int32')
+        inputs['ring_aromatic'] = np.array(extra_info, 'int32')
 
     return inputs

@@ -10,10 +10,9 @@ def gather_shape(x):
     x_shape = tf.shape(x)
     B, M, N = x_shape[0], x_shape[1], x_shape[2]
 
-    range_B = tf.range(B)[:, None, None, None]
-    range_B_t = tf.tile(range_B, [1, M, N, 1])
-    x_indices = tf.concat(
-        [range_B_t, tf.expand_dims(x, -1)], -1)
+    range_B = tf.broadcast_to(tf.reshape(tf.range(B), [B, 1, 1, 1]), [B, M, N, 1])
+
+    x_indices = tf.concat([range_B, tf.expand_dims(x, -1)], -1)
 
     return x_indices
 

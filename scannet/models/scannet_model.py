@@ -25,7 +25,7 @@ class SCANNet:
         Implements main SCANNet 
     """
 
-    def __init__(self, config=None, pretrained=''):
+    def __init__(self, config=None, pretrained='', mode='train'):
         """
         Args:
             config:
@@ -42,14 +42,21 @@ class SCANNet:
         """
         self.config = config
         self.model = None
-
-        if pretrained:
-            print('load pretrained model from ', pretrained)
-            self.model = create_model_pretrained(pretrained)
-            self.config['hyper']['pretrained'] = pretrained
-            
+        if mode == 'train' or mode == 'eval':
+            if pretrained:
+                print('load pretrained model from ', pretrained)
+                self.model = create_model_pretrained(pretrained)
+                self.config['hyper']['pretrained'] = pretrained
+                
+            else:
+                self.model = create_model(self.config)
         else:
-            self.model = create_model(self.config)
+            model = load_model(pretrained, custom_objects=_CUSTOM_OBJECTS)
+
+            attention_output = model.get_layer('global_attention').output[0]
+            model_infer = tf.keras.Model(inputs=model.input, outputs=[
+                                        model.output, attention_output])
+            self.model = model_infer
 
     @classmethod
     def load_model_infer(cls, path):
@@ -59,6 +66,11 @@ class SCANNet:
         model_infer = tf.keras.Model(inputs=model.input, outputs=[
                                      model.output, attention_output])
         return model_infer
+    
+    @classmethod
+    def load_model(cls, path):
+        model = create_model_pretrained(path)
+        return model
         
     def prepare_dataset(self, split=True):
 
@@ -87,12 +99,14 @@ class SCANNet:
                                                                           use_ring=self.config['model']['use_ring'],
                                                                           shuffle=(len(indices) == len(train)))
                                                              for indices in (train, valid, test)]
+            return train, valid, test
+        
         else:
-            indices = range(self.config['hyper']['data_size'])
             self.dataIter = DataIterator(batch_size=self.config['hyper']['batch_size'],
-                                         data_neighbor=data_neighbor[indices],
-                                         data_energy=data_energy[indices],
-                                         use_ring=self.config['model']['use_ring'])
+                                         data_neighbor=data_neighbor,
+                                         data_energy=data_energy,
+                                         use_ring=self.config['model']['use_ring'],
+                                         shuffle=False)
 
     def create_callbacks(self):
 
@@ -104,11 +118,11 @@ class SCANNet:
                                          save_weights_only=False, verbose=2,
                                          save_best_only=True))
 
-        callbacks.append(EarlyStopping(monitor='val_mae', patience=100))
+        callbacks.append(EarlyStopping(monitor='val_mae', patience=200))
 
         lr = SGDRC(lr_min=self.config['hyper']['min_lr'],
                    lr_max=self.config['hyper']['lr'], t0=50, tmult=2,
-                   lr_max_compression=1.2, trigger_val_mae=100)
+                   lr_max_compression=1.2, trigger_val_mae=300)
         sgdr = LearningRateScheduler(lr.lr_scheduler)
 
         callbacks.append(lr)
@@ -117,8 +131,8 @@ class SCANNet:
         return callbacks
 
     def train(self, epochs=1000):
-        self.model.compile(loss=root_mean_squared_error, optimizer=tf.keras.optimizers.Adam(self.config['hyper']['lr']),
-                                                                                            # gradient_transformers=[AutoClipper(10)]),
+        self.model.compile(loss=root_mean_squared_error, optimizer=tf.keras.optimizers.Adam(self.config['hyper']['lr'],
+                                                                                            gradient_transformers=[AutoClipper(10)]),
                            metrics=['mae', r2_square])
 
         if not os.path.exists('{}_{}/models/'.format(self.config['hyper']['save_path'], self.config['hyper']['target'])):
@@ -147,15 +161,19 @@ class SCANNet:
             print('Load best validation weight for predicting testset')
             self.model = load_model('{}_{}/models/model_{}.h5'.format(
                 self.config['hyper']['save_path'], self.config['hyper']['target'], self.config['hyper']['target']), custom_objects=_CUSTOM_OBJECTS)
+            
+        data = self.dataIter if hasattr(self,'dataIter') else self.trainIter
 
         y_predict = []
         y = []
-        for i in range(len(self.testIter)):
-            inputs, target = self.testIter.__getitem__(i)
+        for i in range(len(data)):
+            inputs, target = data.__getitem__(i)
             output = self.model.predict(inputs)
 
             y.extend(list(target))
             y_predict.extend(list(np.squeeze(output)))
+            if i % 10==0:
+                print(f'{i}/{len(data)}')
 
         print('Result for testset: R2 score: ', r2_score(y, y_predict),
               ' and MAE: ', mean_absolute_error(y, y_predict))
@@ -175,12 +193,13 @@ class SCANNet:
                         ', Test R2: ' + str(r2_score(y, y_predict)))
 
             print('Saved model record for dataset')
-        
 
-def create_model_pretrained(config):
+    def predict_data(self,ip):
+        return self.model.predict(ip)
 
-    model = load_model(config['hyper']['pretrained'],
-                       custom_objects=_CUSTOM_OBJECTS)
+def create_model_pretrained(pretrained):
+
+    model = load_model(pretrained,custom_objects=_CUSTOM_OBJECTS)
     model.summary()
 
     return model

@@ -102,6 +102,7 @@ class LocalAttention(keras.layers.Layer):
 
         # Get neighbor vector from indices, size [B, M, N, d] and  Multiply weight Voronoi with neighbor
         atom_neighbor = tf.gather_nd(atom_query, atom_neighbor)
+        # atom_neighbor = tf.gather(atom_query, tf.expand_dims(atom_neighbor,-1), batch_dims=1)
 
         # Shape neighbor_weighted [B, M, N, embedding_dim ]
         atom_neighbor = tf.reshape(atom_neighbor, [bs, qlen, nlen,  self.dim])

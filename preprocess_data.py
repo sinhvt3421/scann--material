@@ -5,34 +5,29 @@ from utils.dataset import *
 import argparse
 from utils.voronoi_neighbor import parallel_compute_neighbor
 
+# Define dictionary mapping dataset names to functions
+dataset_functions = {
+    'qm9': process_qm9,
+    'fullerene': process_fullerene,
+    'ptgp': process_gp,
+    'smfe': process_smfe,
+    'ternary': process_ternary
+}
 
 def init_dataset(dataset='qm9', data_path='', save_path='', d_t=4.0, w_t=0.2, p=8):
 
-    if dataset == 'qm9':
-        print('Init dataset QM9:')
+    # Call the appropriate function based on the dataset name
+    if dataset in dataset_functions:
+        print(f'Init dataset {dataset}:')
         if not os.path.exists(os.path.join(save_path, dataset)):
-            process_qm9(save_path)
-
-    if dataset == 'fullerene':
-        print('Init dataset Fullerene:')
-        if not os.path.exists(os.path.join(save_path, dataset)):
-            process_fullerene(data_path, save_path)
-    
-    if dataset == 'ptgp':
-        print('Init dataset Pt/Graphene:')
-        if not os.path.exists(os.path.join(save_path, dataset)):
-            process_gp(data_path, save_path)
-
-    if dataset == 'smfe':
-        print('Init dataset SmFe12:')
-        if not os.path.exists(os.path.join(save_path, dataset)):
-            process_smfe(data_path, save_path)
+            dataset_functions[dataset](data_path, save_path)
+    else:
+        print(f'Dataset {dataset} is not recognized.')
 
     parallel_compute_neighbor(dataset_path=os.path.join(save_path, dataset, dataset+'_data_energy.npy'),
                               save_path=os.path.join(
                                   save_path, dataset, '{}_data_neighbor_dt{}_wt{}.npy'.format(dataset, d_t, w_t)),
                               d_t=d_t, w_t=w_t, pool=p)
-
 
 def main(args):
 

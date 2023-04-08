@@ -118,23 +118,16 @@ def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring
 
     data_full = np.load(dataset, allow_pickle=True)
 
-    data_energy = []
     if use_ref:
         print('Using reference energy optimization')
 
     if use_ring:
         print('Using ring aromatic information')
 
-    for i, d in enumerate(data_full):
-        if use_ring:
-            data_energy.append([d['Atomic'], d['Properties'][target_prop],
-                                d['Ring'], d['Aromatic']])
-        else:
-            if use_ref:
-                data_energy.append([d['Atomic'],
-                                    d['Properties'][target_prop]-d['Properties']['Ref_energy']])
-            else:
-                data_energy.append([d['Atomic'], d['Properties'][target_prop]])
+    data_energy = [[d['Atomic'], d['Properties'][target_prop], d['Ring'], d['Aromatic']] if use_ring
+                else [d['Atomic'], float(d['Properties'][target_prop])-float(d['Properties']['Ref_energy'])] if use_ref
+                else [d['Atomic'], d['Properties'][target_prop]]
+                for d in data_full]
 
     data_energy = np.array(data_energy, dtype='object')
 

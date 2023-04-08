@@ -62,16 +62,16 @@ class DataIterator(Sequence):
             [float(p[1]) * self.converter for p in batch_atom], 'float32')
 
         # Padding neighbor for each atoms
-        local_neighbor = np.array([[[n[1] for n in lc] for lc in p] for p in batch_nei],'int32')
+        local_neighbor = [[[n[1] for n in lc] for lc in p] for p in batch_nei]
         pad_local = pad_nested_sequences(
             local_neighbor, max_length_neighbor, max_length_center, value=1000, dtype='int32')
         mask_local = (pad_local != 1000)
         pad_local[pad_local == 1000] = 0
 
         # Padding local weight and distance
-        local_weight = np.array([[[n[2] for n in lc] for lc in p] for p in batch_nei],'float32')
-        local_distance = np.array([[self.expand.convert([float(n[3]) for n in lc])
-                           for lc in p] for p in batch_nei],'float32')
+        local_weight = [[[n[2] for n in lc] for lc in p] for p in batch_nei]
+        local_distance = [[self.expand.convert([float(n[3]) for n in lc])
+                           for lc in p] for p in batch_nei]
         pad_local_weight = pad_nested_sequences(
             local_weight, max_length_neighbor, max_length_center, dtype='float32')
 
@@ -79,7 +79,7 @@ class DataIterator(Sequence):
             local_distance, max_length_neighbor, max_length_center, dtype='float32')
 
         # Padding atomic numbers of atom
-        atomics = np.array([center[0] for center in batch_atom],'int32')
+        atomics = [center[0] for center in batch_atom]
         pad_atom = pad_sequence(atomics, padding='post',
                                 maxlen=max_length_center, value=0, dtype='int32')
 
@@ -100,6 +100,6 @@ class DataIterator(Sequence):
         if self.use_ring:
             inputs['ring_aromatic'] = pad_extra
 
-        yield (inputs, energy)
+        return (inputs, energy)
     
             

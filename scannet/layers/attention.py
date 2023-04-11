@@ -9,11 +9,12 @@ class ResidualNorm(keras.layers.Layer):
         super(ResidualNorm, self).__init__()
         self.dim = dim
         self.dropout = dropout_rate
-        
+
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(dim, activation='swish',
                                   kernel_regularizer=regularizers.l2(1e-4)),
-            tf.keras.layers.Dense(dim, kernel_regularizer=regularizers.l2(1e-4)),
+            tf.keras.layers.Dense(
+                dim, kernel_regularizer=regularizers.l2(1e-4)),
             tf.keras.layers.Dropout(dropout_rate)])
 
         self.add = tf.keras.layers.Add()
@@ -61,7 +62,7 @@ class LocalAttention(keras.layers.Layer):
 
         self.v_proj = v_proj
         self.kq_proj = kq_proj
-        
+
         # Linear projection before attention
         self.proj_q = tf.keras.layers.Dense(
             dim, name='query',
@@ -102,7 +103,6 @@ class LocalAttention(keras.layers.Layer):
 
         # Get neighbor vector from indices, size [B, M, N, d] and  Multiply weight Voronoi with neighbor
         atom_neighbor = tf.gather_nd(atom_query, atom_neighbor)
-        # atom_neighbor = tf.gather(atom_query, tf.expand_dims(atom_neighbor,-1), batch_dims=1)
 
         # Shape neighbor_weighted [B, M, N, embedding_dim ]
         atom_neighbor = tf.reshape(atom_neighbor, [bs, qlen, nlen,  self.dim])
@@ -188,7 +188,7 @@ class GlobalAttention(keras.layers.Layer):
     Implements a global attention block
     """
 
-    def __init__(self,  dim=128, v_proj=True, scale=0.5, kq_proj=True,  norm=True, **kwargs):
+    def __init__(self,  dim=128, v_proj=False, kq_proj=True,  norm=True, **kwargs):
         """
 
         Args:
@@ -203,7 +203,6 @@ class GlobalAttention(keras.layers.Layer):
 
         # Setup
         self.dim = dim
-        self.scale = scale
         self.norm = norm
 
         self.v_proj = v_proj
@@ -231,19 +230,15 @@ class GlobalAttention(keras.layers.Layer):
             value = self.proj_v(atom_query)
 
         # shape energy [bs, len_atom_centers, len_atom_centers]
-        # N = tf.cast(tf.shape(query)[1], tf.float32)
-        dk = tf.cast(tf.shape(key)[-1], tf.float32)**(-self.scale)
-        query = tf.multiply(query, dk)
-
         # Multiply key vs query and take the sum over query index (axis -1)
-        energy = tf.einsum('bqd,bkd->bqk', key, query)
-        energy = tf.multiply(mask, energy)
+        energy = tf.einsum('bkd , bqd -> bkq',
+                           tf.multiply(mask, key), tf.multiply(mask, query))
 
+        # Calculate attention from other atom except for the center
         identity = tf.eye(tf.shape(energy)[1], batch_shape=[
                           tf.shape(energy)[0]], dtype='bool')
         mask_center = tf.cast(tf.math.logical_not(identity), tf.float32)
 
-        # Calculate attention from other atom except for the center
         energy = tf.multiply(mask_center, energy)
 
         # Taking the sum of attention from all local structures
@@ -276,7 +271,7 @@ class GlobalAttention(keras.layers.Layer):
             v = atom_query
 
         # Multiply the attention score and local structure representation
-        context = tf.multiply(mask, tf.einsum('bqj,bqd -> bqd', attn, v))
+        context = tf.multiply(mask, tf.multiply(attn, v))
 
         context = tf.reduce_sum(context, 1)
 
@@ -287,7 +282,6 @@ class GlobalAttention(keras.layers.Layer):
 
         config.update({
             'dim': self.dim,
-            'scale': self.scale,
             'norm': self.norm,
             'v_proj': self.v_proj,
             'kq_proj': self.kq_proj,

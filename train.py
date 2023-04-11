@@ -41,7 +41,7 @@ def main(args):
     if args.mode == 'train':
         print('Start Model training')
         start = time.time()
-        scannet.train(500)
+        scannet.train(1000)
 
         print('Training time: ', time.time()-start)
     

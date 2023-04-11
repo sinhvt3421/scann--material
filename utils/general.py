@@ -124,9 +124,9 @@ def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring
     if use_ring:
         print('Using ring aromatic information')
 
-    data_energy = [[d['Atomic'], d['Properties'][target_prop], d['Ring'], d['Aromatic']] if use_ring
+    data_energy = [[d['Atomic'], float(d['Properties'][target_prop]), d['Ring'], d['Aromatic']] if use_ring
                 else [d['Atomic'], float(d['Properties'][target_prop])-float(d['Properties']['Ref_energy'])] if use_ref
-                else [d['Atomic'], d['Properties'][target_prop]]
+                else [d['Atomic'], float(d['Properties'][target_prop])]
                 for d in data_full]
 
     data_energy = np.array(data_energy, dtype='object')

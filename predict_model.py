@@ -1,56 +1,53 @@
+import tensorflow as tf
+from sklearn.metrics import r2_score, mean_absolute_error
+from scannet.models import SCANNet
+import yaml
+import pickle
+import argparse
+import numpy as np
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-import argparse
-import pickle
-import yaml
-from utils.general import load_dataset
-from utils.datagenerator import DataIterator
-from scannet.models import SCANNet
-import tensorflow as tf
-
-
 
 def main(args):
+
     config = yaml.safe_load(
         open(os.path.join(args.trained_model, 'config.yaml')))
 
     print('Load pretrained weight for target ', config['hyper']['target'])
-    model = SCANNet.load_model_infer(os.path.join(
-        args.trained_model, 'models', 'model_{}.h5'.format(config['hyper']['target'])))
+    scannet = SCANNet(config, os.path.join(
+        args.trained_model, 'models', 'model_{}.h5'.format(config['hyper']['target'])), mode='infer')
 
     print('Load data for trained model: ', config['hyper']['data_energy_path'])
-    data_energy, data_neighbor = load_dataset(use_ref=config['hyper']['use_ref'],
-                                              use_ring=config['model']['use_ring'],
-                                              dataset=config['hyper']['data_energy_path'],
-                                              dataset_neighbor=config['hyper']['data_nei_path'],
-                                              target_prop=config['hyper']['target'])
-
-    datasetIter = DataIterator(batch_size=config['hyper']['batch_size'],
-                               data_neighbor=data_neighbor,
-                               data_energy=data_energy, converter=True,
-                               use_ring=config['model']['use_ring'])
+    scannet.prepare_dataset(split=False)
 
     ga_scores = []
     struct_energy = []
-
+    y = []
     idx = 0
-    for i in range(len(datasetIter)):
-        inputs, _ = datasetIter.__getitem__(i)
-        energy, attn_global = model.predict(inputs)
+    data = scannet.dataIter
+
+    for i in range(len(data)):
+        inputs, target = data.__getitem__(i)
+        energy, attn_global = scannet.predict_data(inputs)
 
         ga_scores.extend(attn_global)
-        struct_energy.extend(energy)
 
-        idx += datasetIter.batch_size
-        print(idx)
+        struct_energy.extend(list(np.squeeze(energy)))
+        y.extend(list(target))
+
+        idx += data.batch_size
+        if i % 10 == 0:
+            print(idx)
+
+    print(r2_score(struct_energy, y), mean_absolute_error(struct_energy, y))
 
     print('Save prediction and GA score')
     pickle.dump(ga_scores, open(os.path.join(args.trained_model,
-                'ga_scores_{}.pickle'.format(config['hyper']['target'])), 'wb'))
+                                             'ga_scores_{}.pickle'.format(config['hyper']['target'])), 'wb'))
 
-    pickle.dump(struct_energy, open(os.path.join(args.trained_model,
-                'energy_pre_{}.pickle'.format(config['hyper']['target'])), 'wb'))
+    pickle.dump([y, struct_energy], open(os.path.join(args.trained_model,
+                                                      'energy_pre_{}.pickle'.format(config['hyper']['target'])), 'wb'))
 
 
 if __name__ == "__main__":

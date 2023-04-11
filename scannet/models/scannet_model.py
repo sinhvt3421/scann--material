@@ -47,7 +47,7 @@ class SCANNet:
                 print('load pretrained model from ', pretrained)
                 self.model = create_model_pretrained(pretrained)
                 self.config['hyper']['pretrained'] = pretrained
-                
+
             else:
                 self.model = create_model(self.config)
         else:
@@ -55,7 +55,7 @@ class SCANNet:
 
             attention_output = model.get_layer('global_attention').output[0]
             model_infer = tf.keras.Model(inputs=model.input, outputs=[
-                                        model.output, attention_output])
+                                         model.output, attention_output])
             self.model = model_infer
 
     @classmethod
@@ -66,12 +66,12 @@ class SCANNet:
         model_infer = tf.keras.Model(inputs=model.input, outputs=[
                                      model.output, attention_output])
         return model_infer
-    
+
     @classmethod
     def load_model(cls, path):
         model = create_model_pretrained(path)
         return model
-        
+
     def prepare_dataset(self, split=True):
 
         data_energy, data_neighbor = load_dataset(use_ref=self.config['hyper']['use_ref'],
@@ -100,13 +100,12 @@ class SCANNet:
                                                                           shuffle=(len(indices) == len(train)))
                                                              for indices in (train, valid, test)]
             return train, valid, test
-        
+
         else:
             self.dataIter = DataIterator(batch_size=self.config['hyper']['batch_size'],
                                          data_neighbor=data_neighbor,
                                          data_energy=data_energy,
-                                         use_ring=self.config['model']['use_ring'],
-                                         shuffle=False)
+                                         use_ring=self.config['model']['use_ring'])
 
     def create_callbacks(self):
 
@@ -161,8 +160,8 @@ class SCANNet:
             print('Load best validation weight for predicting testset')
             self.model = load_model('{}_{}/models/model_{}.h5'.format(
                 self.config['hyper']['save_path'], self.config['hyper']['target'], self.config['hyper']['target']), custom_objects=_CUSTOM_OBJECTS)
-            
-        data = self.dataIter if hasattr(self,'dataIter') else self.trainIter
+
+        data = self.dataIter if hasattr(self, 'dataIter') else self.trainIter
 
         y_predict = []
         y = []
@@ -172,7 +171,7 @@ class SCANNet:
 
             y.extend(list(target))
             y_predict.extend(list(np.squeeze(output)))
-            if i % 10==0:
+            if i % 10 == 0:
                 print(f'{i}/{len(data)}')
 
         print('Result for testset: R2 score: ', r2_score(y, y_predict),
@@ -194,12 +193,13 @@ class SCANNet:
 
             print('Saved model record for dataset')
 
-    def predict_data(self,ip):
+    def predict_data(self, ip):
         return self.model.predict(ip)
+
 
 def create_model_pretrained(pretrained):
 
-    model = load_model(pretrained,custom_objects=_CUSTOM_OBJECTS)
+    model = load_model(pretrained, custom_objects=_CUSTOM_OBJECTS)
     model.summary()
 
     return model
@@ -223,9 +223,10 @@ def create_model(config):
         None, None, 20), dtype='float32')
 
     inputs = [atomic,  atom_mask, neighbor,
-                  neighbor_mask, neighbor_weight, neighbor_distance]
+              neighbor_mask, neighbor_weight, neighbor_distance]
     if cfm['use_ring']:
-        ring_info = Input(name='ring_aromatic', shape=(None, 2), dtype='float32')
+        ring_info = Input(name='ring_aromatic',
+                          shape=(None, 2), dtype='float32')
         inputs.append(ring_info)
 
     # Embedding atom and extra information as ring, aromatic
@@ -275,8 +276,7 @@ def create_model(config):
                     kernel_regularizer=regularizers.l2(1e-4))(centers)
 
     # Using weighted attention score for combining structures representation
-    attn_global, struc_rep = GlobalAttention(v_proj=False, kq_proj=True,
-                                             dim=cfm['global_dim'], scale=cfm['scale'],
+    attn_global, struc_rep = GlobalAttention(v_proj=False, kq_proj=True, dim=cfm['global_dim'],
                                              norm=cfm['use_ga_norm'])(centers, atom_mask)
 
     # Shape struct representation [B, d]

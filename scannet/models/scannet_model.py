@@ -161,7 +161,7 @@ class SCANNet:
             self.model = load_model('{}_{}/models/model_{}.h5'.format(
                 self.config['hyper']['save_path'], self.config['hyper']['target'], self.config['hyper']['target']), custom_objects=_CUSTOM_OBJECTS)
 
-        data = self.dataIter if hasattr(self, 'dataIter') else self.trainIter
+        data = self.dataIter if hasattr(self, 'dataIter') else self.testIter
 
         y_predict = []
         y = []

@@ -203,8 +203,8 @@ def prepare_input_pmt(struct, d_t=4.0, w_t=0.2):
     local_distance = np.array([pad_sequence([GD.convert([float(n[3]) for n in lc])
                                              for lc in neighbors], dtype='float32')])
 
-    atomics = np.array([atomic_numbers[x.species_string]
-                        for x in struct], 'int32')
+    atomics = np.array([[atomic_numbers[x.species_string]
+                        for x in struct]], 'int32')
     mask_atom = (atomics != 0)
 
     inputs = {'atomic': atomics, 'atom_mask': np.expand_dims(mask_atom, -1),

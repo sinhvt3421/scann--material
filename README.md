@@ -67,9 +67,9 @@ The MAEs on the various models are given below:
 
 | Property | Units      | MAE   |
 |----------|------------|-------|
-| HOMO     | meV         | 44 |
+| HOMO     | meV         | 41 |
 | LUMO     | meV         | 37 |
-| Gap      | meV         | 67 |
+| Gap      | meV         | 61 |
 | α        | Bohr^3     | 0.141|
 | Cv       | cal/(molK) | 0.050 |
 

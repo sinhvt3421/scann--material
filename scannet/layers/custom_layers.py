@@ -1,12 +1,27 @@
+import math
+
+import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
-from tensorflow.keras import regularizers
-import math
-import numpy as np
 import tensorflow_probability as tfp
+from tensorflow.keras import regularizers
+
+
+@tf.custom_gradient
+def mrelu(input_tensor):
+    """
+    A modified version of ReLU with linear gradient.
+    """
+
+    def grad(dy):
+        return dy  # Linear gradient for the backward pass.
+
+    return tf.maximum(input_tensor, 0), grad
+
 
 def gather_shape(x):
     import tensorflow as tf
+
     x_shape = tf.shape(x)
     B, M, N = x_shape[0], x_shape[1], x_shape[2]
 
@@ -16,16 +31,58 @@ def gather_shape(x):
 
     return x_indices
 
+
+class GaussianExpansion(tf.keras.layers.Layer):
+    """
+    Simple Gaussian expansion.
+    A vector of distance [d1, d2, d3, ..., dn] is expanded to a
+    matrix of shape [n, m], where m is the number of Gaussian basis centers
+
+    """
+
+    def __init__(self, centers, **kwargs):
+        """
+        Args:
+            centers (np.ndarray): Gaussian basis centers
+            width (float): width of the Gaussian basis
+            **kwargs:
+        """
+        self.centers = centers
+        self.width = np.diff(self.centers).mean()
+        super().__init__(**kwargs)
+
+    def call(self, inputs, masks=None):
+        """
+        The core logic function
+
+        Args:
+            inputs (tf.Tensor): input distance tensor, with shape [B, M, N]
+            masks (tf.Tensor): bool tensor, not used here
+        """
+        return tf.math.exp(
+            -((tf.expand_dims(inputs, -1) - tf.expand_dims(tf.expand_dims(self.centers, 0), 0)) ** 2) / self.width**2
+        )
+
+    def get_config(self):
+        config = super(GaussianExpansion, self).get_config()
+
+        config.update(
+            {
+                "centers": self.centers,
+            }
+        )
+        return config
+
+
 class AutoClipper:
     """
-        From paper: AutoClip: Adaptive Gradient Clipping
-        https://github.com/pseeth/autoclip
+    From paper: AutoClip: Adaptive Gradient Clipping
+    https://github.com/pseeth/autoclip
     """
 
     def __init__(self, clip_percentile, history_size=10000):
         self.clip_percentile = clip_percentile
-        self.grad_history = tf.Variable(
-            tf.zeros(history_size), trainable=False)
+        self.grad_history = tf.Variable(tf.zeros(history_size), trainable=False)
         self.i = tf.Variable(0, trainable=False)
         self.history_size = history_size
 
@@ -35,13 +92,11 @@ class AutoClipper:
         assign_idx = tf.math.mod(self.i, self.history_size)
         self.grad_history = self.grad_history[assign_idx].assign(total_norm)
         self.i = self.i.assign_add(1)
-        clip_value = tfp.stats.percentile(
-            self.grad_history[: self.i], q=self.clip_percentile)
+        clip_value = tfp.stats.percentile(self.grad_history[: self.i], q=self.clip_percentile)
         return [(tf.clip_by_norm(g, clip_value), v) for g, v in grads_and_vars]
 
     def _get_grad_norm(self, t, axes=None, name=None):
-        values = tf.convert_to_tensor(t.values if isinstance(
-            t, tf.IndexedSlices) else t, name="t")
+        values = tf.convert_to_tensor(t.values if isinstance(t, tf.IndexedSlices) else t, name="t")
 
         # Calculate L2-norm, clip elements by ratio of clip_norm to L2-norm
         l2sum = tf.math.reduce_sum(values * values, axes, keepdims=True)
@@ -66,8 +121,7 @@ class SGDRC(tf.keras.callbacks.Callback):
         ```python
             sgdr = SGDR(lr_min=0.0, lr_max=0.05,
                                 base_epochs=10, mul_epochs=2)
-            model.compile(optimizer=keras.optimizers.SGD(decay=1e-4, momentum=0.9),
-                          loss=loss)
+            model.compile(optimizer=keras.optimizers.SGD(decay=1e-4, momentum=0.9), loss=loss)
             model.fit(X_train, Y_train, callbacks=[sgdr])
         ```
 
@@ -79,7 +133,16 @@ class SGDRC(tf.keras.callbacks.Callback):
                 after each cycle.
     """
 
-    def __init__(self, lr_max, lr_min, lr_max_compression=5, t0=10, tmult=1, trigger_val_mae=9999, show_lr=True):
+    def __init__(
+        self,
+        lr_max,
+        lr_min,
+        lr_max_compression=5,
+        t0=10,
+        tmult=1,
+        trigger_val_mae=9999,
+        show_lr=True,
+    ):
         # Global learning rate max/min
         self.lr_max = lr_max
         self.lr_min = lr_min
@@ -122,13 +185,14 @@ class SGDRC(tf.keras.callbacks.Callback):
                 self.best_val_mae = logs["val_mae"]
                 # Avoid lr_warmup_next too small
                 if self.lr_max_compression > 0:
-                    self.lr_warmup_next = max(
-                        self.lr_warmup_current / self.lr_max_compression, self.lr)
+                    self.lr_warmup_next = max(self.lr_warmup_current / self.lr_max_compression, self.lr)
                 else:
                     self.lr_warmup_next = self.lr
         if self.show_lr:
-            print(f"sgdr_triggered = {self.triggered}, " +
-                  f"current_lr = {self.lr:f}, next_warmup_lr = {self.lr_warmup_next:f}, next_warmup = {self.ti-self.tcur}")
+            print(
+                f"sgdr_triggered = {self.triggered}, "
+                + f"current_lr = {self.lr:f}, next_warmup_lr = {self.lr_warmup_next:f}, next_warmup = {self.ti-self.tcur}"
+            )
 
     # SGDR
     def lr_scheduler(self, epoch):
@@ -140,6 +204,7 @@ class SGDRC(tf.keras.callbacks.Callback):
             self.ti = int(self.tmult * self.ti)
             self.tcur = 1
             self.lr_warmup_current = self.lr_warmup_next
-        self.lr = float(self.lr_min + (self.lr_warmup_current -
-                                       self.lr_min) * (1 + np.cos(self.tcur/self.ti*np.pi)) / 2.0)
+        self.lr = float(
+            self.lr_min + (self.lr_warmup_current - self.lr_min) * (1 + np.cos(self.tcur / self.ti * np.pi)) / 2.0
+        )
         return self.lr

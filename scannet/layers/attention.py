@@ -10,12 +10,13 @@ class ResidualNorm(keras.layers.Layer):
         self.dim = dim
         self.dropout = dropout_rate
 
-        self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(dim, activation='swish',
-                                  kernel_regularizer=regularizers.l2(1e-4)),
-            tf.keras.layers.Dense(
-                dim, kernel_regularizer=regularizers.l2(1e-4)),
-            tf.keras.layers.Dropout(dropout_rate)])
+        self.seq = tf.keras.Sequential(
+            [
+                tf.keras.layers.Dense(dim, activation="swish", kernel_regularizer=regularizers.l2(1e-4)),
+                tf.keras.layers.Dense(dim, kernel_regularizer=regularizers.l2(1e-4)),
+                tf.keras.layers.Dropout(dropout_rate),
+            ]
+        )
 
         self.add = tf.keras.layers.Add()
 
@@ -28,10 +29,12 @@ class ResidualNorm(keras.layers.Layer):
 
     def get_config(self):
         config = super(ResidualNorm, self).get_config()
-        config.update({
-            'dim': self.dim,
-            'dropout': self.dropout,
-        })
+        config.update(
+            {
+                "dim": self.dim,
+                "dropout": self.dropout,
+            }
+        )
         return config
 
 
@@ -41,7 +44,18 @@ class LocalAttention(keras.layers.Layer):
     Implements a local attention block
     """
 
-    def __init__(self, dim=128, num_head=8, v_proj=True, scale=0.5, activation='swish', kq_proj=True, **kwargs):
+    def __init__(
+        self,
+        dim=128,
+        num_head=8,
+        v_proj=True,
+        scale=0.5,
+        activation="swish",
+        kq_proj=True,
+        dropout=False,
+        g_update=False,
+        **kwargs
+    ):
         """_summary_
 
         Args:
@@ -63,35 +77,39 @@ class LocalAttention(keras.layers.Layer):
         self.v_proj = v_proj
         self.kq_proj = kq_proj
 
-        # Linear projection before attention
-        self.proj_q = tf.keras.layers.Dense(
-            dim, name='query',
-            kernel_regularizer=regularizers.l2(1e-4))
+        self.dropout = dropout
 
-        self.proj_k = tf.keras.layers.Dense(
-            dim,  name='key',
-            kernel_regularizer=regularizers.l2(1e-4))
+        # Linear projection before attention
+        self.proj_q = tf.keras.layers.Dense(dim, name="query", kernel_regularizer=regularizers.l2(1e-4))
+
+        self.proj_k = tf.keras.layers.Dense(dim, name="key", kernel_regularizer=regularizers.l2(1e-4))
 
         if self.v_proj:
-            self.proj_v = tf.keras.layers.Dense(
-                dim, name='value',
-                kernel_regularizer=regularizers.l2(1e-4))
+            self.proj_v = tf.keras.layers.Dense(dim, name="value", kernel_regularizer=regularizers.l2(1e-4))
 
         # Filter gaussian distance - Distance embedding
-        self.filter_dis = tf.keras.layers.Dense(
-            dim, name='filter_dis', activation=activation,
-            kernel_regularizer=regularizers.l2(1e-4))
+        self.g_update = g_update
+        self.filter_geo = tf.keras.layers.Dense(
+            dim,
+            name="filter_geo",
+            activation=activation,
+            kernel_regularizer=regularizers.l2(1e-4),
+        )
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layer_norm_g = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
-    def call(self, atom_query, atom_neighbor, neighbor_distance, neigbor_weight, mask):
+        if self.dropout:
+            self.drop_out = tf.keras.layers.Dropout(0.1)
+
+    def call(self, atom_query, atom_neighbor, neighbor_geometry, mask, neighbor_weight=None):
         """
         Args:
             atom_query:     A tensor of size [batch_size, len_atom_centers, dim]. Center representation
                             for all local structure
             atom_neighbor:  A tensor of size [batch_size,len_atom_centers, num_neighbors, dim].
                             Representation for all neighbor of center atoms
-            neighbor_distance: A tensor of size [batch_size, len_atom_centers, num_neighbors, 1]
+            neighbor_geometry: A tensor of size [batch_size, len_atom_centers, num_neighbors, 1]
                             Distance from neighbor to center atoms
             mask:           A Boolen tensor for masking different number of neighbors for each center atoms
         """
@@ -105,10 +123,25 @@ class LocalAttention(keras.layers.Layer):
         atom_neighbor = tf.gather_nd(atom_query, atom_neighbor)
 
         # Shape neighbor_weighted [B, M, N, embedding_dim ]
-        atom_neighbor = tf.reshape(atom_neighbor, [bs, qlen, nlen,  self.dim])
+        atom_neighbor = tf.reshape(atom_neighbor, [bs, qlen, nlen, self.dim])
 
-        neighbor_distance = self.filter_dis(neighbor_distance)
-        atom_neighbor_distance = atom_neighbor * neighbor_distance * neigbor_weight
+        if self.g_update:
+            geometry_update = self.filter_geo(
+                tf.concat(
+                    [
+                        tf.repeat(tf.expand_dims(atom_query, 2), nlen, 2),
+                        neighbor_geometry,
+                        atom_neighbor,
+                    ],
+                    -1,
+                )
+            )
+
+            neighbor_geometry = self.layer_norm_g(geometry_update + neighbor_geometry)
+        else:
+            neighbor_geometry = self.filter_geo(neighbor_geometry) * neighbor_weight
+
+        atom_neighbor_distance = atom_neighbor * neighbor_geometry
 
         # Query centers atoms shape [bs, len_atom_centers, dim]
         query = self.proj_q(atom_query)
@@ -127,21 +160,23 @@ class LocalAttention(keras.layers.Layer):
         key = tf.reshape(key, [bs, -1, nlen, self.num_head, self.hdim])
 
         if self.v_proj:
-            value_k = tf.reshape(
-                value_k, [bs, -1, nlen, self.num_head, self.hdim])
+            value_k = tf.reshape(value_k, [bs, -1, nlen, self.num_head, self.hdim])
 
         # shape query_t [bs, len_atom_centers, heads, dim] * [bs, len_atom_centers, num_neighbors, heads, dim]
         # shape energy [bs, heads, len_atom_centers, num_neighbors]
-        dk = tf.cast(tf.shape(key)[-1], tf.float32)**(-self.scale)
+        dk = tf.cast(tf.shape(key)[-1], tf.float32) ** (-self.scale)
         query_t = tf.multiply(query_t, dk)
 
-        energy = tf.einsum('bchd,bcnhd->bhcn', query_t, key)
+        energy = tf.einsum("bchd,bcnhd->bhcn", query_t, key)
 
         # shape attn [bs, heads, len_atom_centers, num_neighbors] -> softmax over num_neighbors
         mask_scaled = (1.0 - tf.expand_dims(mask, 1)) * -1e9
         energy += mask_scaled
 
         attn = tf.nn.softmax(energy, -1)
+
+        if self.dropout:
+            attn = self.drop_out(attn)
 
         if self.v_proj:
             v = value_k
@@ -152,15 +187,12 @@ class LocalAttention(keras.layers.Layer):
             q = query
 
         else:
-            v = tf.reshape(atom_neighbor, [
-                bs, -1, nlen, self.num_head, self.hdim])
+            v = tf.reshape(atom_neighbor, [bs, -1, nlen, self.num_head, self.hdim])
             q = atom_query
 
-        context = tf.einsum('bcn, bcnhd -> bcnhd', mask,
-                            tf.einsum('bhcn, bcnhd -> bcnhd', attn, v))
+        context = tf.einsum("bcn, bcnhd -> bcnhd", mask, tf.einsum("bhcn, bcnhd -> bcnhd", attn, v))
 
-        context = tf.reshape(
-            context, [bs, qlen, nlen, self.dim])
+        context = tf.reshape(context, [bs, qlen, nlen, self.dim])
 
         # Taking sum over weighted neighbor representation and query representation for center representation
 
@@ -168,17 +200,21 @@ class LocalAttention(keras.layers.Layer):
 
         context = self.layer_norm(context)
 
-        return attn, context
+        return attn, context, neighbor_geometry
 
     def get_config(self):
         config = super(LocalAttention, self).get_config()
-        config.update({
-            'dim': self.dim,
-            'scale': self.scale,
-            'num_head': self.num_head,
-            'v_proj': self.v_proj,
-            'kq_proj': self.kq_proj,
-        })
+        config.update(
+            {
+                "dim": self.dim,
+                "scale": self.scale,
+                "num_head": self.num_head,
+                "v_proj": self.v_proj,
+                "kq_proj": self.kq_proj,
+                "g_update": self.g_update,
+                "dropout": self.dropout,
+            }
+        )
         return config
 
 
@@ -188,7 +224,7 @@ class GlobalAttention(keras.layers.Layer):
     Implements a global attention block
     """
 
-    def __init__(self,  dim=128, v_proj=False, kq_proj=True,  norm=True, **kwargs):
+    def __init__(self, dim=128, v_proj=False, kq_proj=True, norm=True, **kwargs):
         """
 
         Args:
@@ -209,15 +245,12 @@ class GlobalAttention(keras.layers.Layer):
         self.kq_proj = kq_proj
 
         # Linear proj. before attention
-        self.proj_q = tf.keras.layers.Dense(
-            dim, name='query', kernel_regularizer=regularizers.l2(1e-4))
+        self.proj_q = tf.keras.layers.Dense(dim, name="query", kernel_regularizer=regularizers.l2(1e-4))
 
-        self.proj_k = tf.keras.layers.Dense(
-            dim,  name='key', kernel_regularizer=regularizers.l2(1e-4))
+        self.proj_k = tf.keras.layers.Dense(dim, name="key", kernel_regularizer=regularizers.l2(1e-4))
 
         if self.v_proj:
-            self.proj_v = tf.keras.layers.Dense(
-                dim, name='value', kernel_regularizer=regularizers.l2(1e-4))
+            self.proj_v = tf.keras.layers.Dense(dim, name="value", kernel_regularizer=regularizers.l2(1e-4))
 
     def call(self, atom_query, mask):
         # Query centers atoms shape [bs, len_atom_centers, dim]
@@ -231,12 +264,10 @@ class GlobalAttention(keras.layers.Layer):
 
         # shape energy [bs, len_atom_centers, len_atom_centers]
         # Multiply key vs query and take the sum over query index (axis -1)
-        energy = tf.einsum('bkd , bqd -> bkq',
-                           tf.multiply(mask, key), tf.multiply(mask, query))
+        energy = tf.einsum("bkd , bqd -> bkq", tf.multiply(mask, key), tf.multiply(mask, query))
 
         # Calculate attention from other atom except for the center
-        identity = tf.eye(tf.shape(energy)[1], batch_shape=[
-                          tf.shape(energy)[0]], dtype='bool')
+        identity = tf.eye(tf.shape(energy)[1], batch_shape=[tf.shape(energy)[0]], dtype="bool")
         mask_center = tf.cast(tf.math.logical_not(identity), tf.float32)
 
         energy = tf.multiply(mask_center, energy)
@@ -244,17 +275,14 @@ class GlobalAttention(keras.layers.Layer):
         # Taking the sum of attention from all local structures
         # shape transform_energy [bs, len_atom_centers, 1]
         agg_attention = tf.reduce_sum(energy, -1)
-        agg_attention = tf.reshape(
-            agg_attention, [tf.shape(atom_query)[0], -1, 1])
+        agg_attention = tf.reshape(agg_attention, [tf.shape(atom_query)[0], -1, 1])
 
         agg_attention = tf.multiply(mask, agg_attention)
 
         # Normalize the score for better softmax behaviors
         if self.norm:
             # Normalize score
-            agg_attention, _ = tf.linalg.normalize(
-                agg_attention, ord='euclidean', axis=1, name=None
-            )
+            agg_attention, _ = tf.linalg.normalize(agg_attention, ord="euclidean", axis=1, name=None)
 
         mask_scale = (1.0 - mask) * -1e9
         agg_attention += mask_scale
@@ -280,10 +308,12 @@ class GlobalAttention(keras.layers.Layer):
     def get_config(self):
         config = super(GlobalAttention, self).get_config()
 
-        config.update({
-            'dim': self.dim,
-            'norm': self.norm,
-            'v_proj': self.v_proj,
-            'kq_proj': self.kq_proj,
-        })
+        config.update(
+            {
+                "dim": self.dim,
+                "norm": self.norm,
+                "v_proj": self.v_proj,
+                "kq_proj": self.kq_proj,
+            }
+        )
         return config

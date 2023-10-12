@@ -63,6 +63,7 @@ class LocalAttention(keras.layers.Layer):
             num_head (int, optional): Number of head attention use. head dim will be dim // num_head. Defaults to 8.
             v_proj (bool, optional): A Boolen for whether using value project or not. Defaults to True.
             scale (float, optional): A scalar for normalization attention value (default to Transformer paper). Defaults to 0.5.
+            g_update (bool, optional): A Boolen for whether using geometrical update in SCANNet+ or not. Defaults to False.
             name (str, optional):  Defaults to 'LA_layer'.
         """
         super(LocalAttention, self).__init__(**kwargs)
@@ -97,7 +98,8 @@ class LocalAttention(keras.layers.Layer):
         )
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.layer_norm_g = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        if self.g_update:
+            self.layer_norm_g = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
         if self.dropout:
             self.drop_out = tf.keras.layers.Dropout(0.1)
@@ -110,7 +112,7 @@ class LocalAttention(keras.layers.Layer):
             atom_neighbor:  A tensor of size [batch_size,len_atom_centers, num_neighbors, dim].
                             Representation for all neighbor of center atoms
             neighbor_geometry: A tensor of size [batch_size, len_atom_centers, num_neighbors, 1]
-                            Distance from neighbor to center atoms
+                            neighbor_geometry of neighbor around center atoms (distance or distance * weight embedding)
             mask:           A Boolen tensor for masking different number of neighbors for each center atoms
         """
 
@@ -141,13 +143,13 @@ class LocalAttention(keras.layers.Layer):
         else:
             neighbor_geometry = self.filter_geo(neighbor_geometry) * neighbor_weight
 
-        atom_neighbor_distance = atom_neighbor * neighbor_geometry
+        atom_neighbor_geometry = atom_neighbor * neighbor_geometry
 
         # Query centers atoms shape [bs, len_atom_centers, dim]
         query = self.proj_q(atom_query)
 
         # Key neighbor atoms shape [bs, len_atom_centers, num_neighbors, dim]
-        key = self.proj_k(atom_neighbor_distance)
+        key = self.proj_k(atom_neighbor_geometry)
 
         if self.v_proj:
             value_k = self.proj_v(atom_neighbor)

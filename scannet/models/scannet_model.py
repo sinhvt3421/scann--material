@@ -374,7 +374,6 @@ def create_model(config):
 
         return centers, attn_local, g_f
 
-    # list_centers_layers = []
     # Local Attention recursive layers
     for i in range(cfm["n_attention"]):
         if cfm["g_update"]:
@@ -385,7 +384,6 @@ def create_model(config):
             centers, attn_local, _ = local_attention_block(
                 centers, neighbor_indices, neighbor_distance, neighbor_mask, neighbor_weight
             )
-        # list_centers_layers.append(centers)
 
     # Dense layer after Local Attention -> representation for each local structure [B, M, d]
     centers = Dense(

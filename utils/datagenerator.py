@@ -52,9 +52,9 @@ class DataIterator(Sequence):
         self.feature = feature
 
         if converter:
-            self.converter = 1000
+            self.converter = 1000  # meV
         else:
-            self.converter = 1.0
+            self.converter = 1.0  # eV
 
         self.on_epoch_end()
 

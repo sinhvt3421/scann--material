@@ -23,7 +23,7 @@ def compute_voronoi_neighbor(struct, cutoff=7, d_thresh=4.0, w_thresh=0.4, max_c
     """
 
     # Initialize VoronoiNN
-    voronoi = VoronoiNN(weight="solid_angle", cutoff=cutoff, allow_pathological=True)
+    voronoi = VoronoiNN(weight="solid_angle", cutoff=cutoff, allow_pathological=True, compute_adj_neighbors=False)
     error_occurred = False
 
     # Filter atoms neighbors with high Voronoi weights: solid_angle/max(solid_angle)
@@ -46,6 +46,7 @@ def compute_voronoi_neighbor(struct, cutoff=7, d_thresh=4.0, w_thresh=0.4, max_c
                         ]
                         for nn in nns
                         if nn["solid_angle"] >= w_thresh
+                        and nn["solid_angle"] / max_weight > 0.2
                         and np.linalg.norm(struct[i].coords - nn["site"].coords) <= d_thresh
                     ]
                 )
@@ -61,7 +62,7 @@ def compute_voronoi_neighbor(struct, cutoff=7, d_thresh=4.0, w_thresh=0.4, max_c
 
 
 # define a function to compute the voronoi neighbor using a single structure
-def compute_voronoi_neighbor_wrapper(s, d_t, w_t):
+def compute_voronoi_neighbor_wrapper(s, d_t, w_t, box=10):
     system_atom = s["Atoms"]
     system_coord = np.array(s["Coords"], dtype="float32")
 
@@ -79,9 +80,12 @@ def compute_voronoi_neighbor_wrapper(s, d_t, w_t):
         cutoff = 7
     else:
         struct = Molecule(system_atom, system_coord)
-        size = 30
-        struct = struct.get_boxed_structure(size, size, size, reorder=False)
-        cutoff = 7 + size
+        a = max(box, max(system_coord[:, 0]) - min(system_coord[:, 0]) + 0.1)
+        b = max(box, max(system_coord[:, 1]) - min(system_coord[:, 1]) + 0.1)
+        c = max(box, max(system_coord[:, 2]) - min(system_coord[:, 2]) + 0.1)
+
+        struct = struct.get_boxed_structure(a, b, c, reorder=False)
+        cutoff = 7
 
     return compute_voronoi_neighbor(struct, cutoff, d_t, w_t)
 

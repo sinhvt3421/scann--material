@@ -1,7 +1,7 @@
 # Table of Contents
 
 * [Introduction](#introduction)
-* [SCANNet Model](#DeepAt-framework)
+* [SCANNet Framework](#scannet-framework)
 * [Usage](#usage)
 * [Datasets](#datasets)
 * [References](#references)
@@ -23,8 +23,7 @@ the contribution of the local structure of material properties.
 
 The model captures information on atomic sites
 and their local environments by considering self-consistent long-range interactions to enrich the structural
-representations of the materials. A comparative experiment was performed on benchmark dataset QM9 to compare
-the performance of the proposed model with state-of-the-art representations in terms of prediction accuracy
+representations of the materials. A comparative experiment was performed on benchmark datasets QM9 and Material Project (2018.6.1) to compare the performance of the proposed model with state-of-the-art representations in terms of prediction accuracy
 for several target properties.
 
 Furthermore,
@@ -52,7 +51,7 @@ the [notebooks directory](notebooks) for Jupyter notebooks with more detailed co
 
 ## Using pre-built models
 
-In our work, we have already built models for the QM9 data set [1]. The model is provided as serialized HDF5+JSON files. 
+In our work, we have already built models for the QM9 [1] and Material Project 2018 [2] datasets . The model is provided as serialized HDF5+yaml files. 
 
 * QM9 molecule data:
   * HOMO: Highest occupied molecular orbital energy
@@ -63,15 +62,23 @@ In our work, we have already built models for the QM9 data set [1]. The model is
 
 The MAEs on the various models are given below:
 
-### Performance of QM9 MEGNet-Simple models
+### Performance on QM9
 
-| Property | Units      | MAE   |
-|----------|------------|-------|
-| HOMO     | meV         | 41 |
-| LUMO     | meV         | 37 |
-| Gap      | meV         | 61 |
-| α        | Bohr^3     | 0.141|
-| Cv       | cal/(molK) | 0.050 |
+| Property | Units      | SCANNet   | SCANNet<sup>+</sup>|
+|----------|------------|-------|-------|
+| HOMO     | meV         | 41 | 32 |
+| LUMO     | meV         | 37 |31|
+| Gap      | meV         | 61 |52|
+| α        | Bohr^3     | 0.141|0.115|
+| Cv       | cal/(molK) | 0.050 |0.041|
+
+### Performance  on Material Project 2018.6.1
+
+| Property | Units      | SCANNet   | SCANNet<sup>+</sup>|
+|----------|------------|-------|-------|
+| Ef     | meV(atom)<sup>-1</sup>        | 29 | 28 |
+| Eg     | meV         | 260 |225|
+
 
 <a name="dataset"></a>
 
@@ -81,30 +88,35 @@ The MAEs on the various models are given below:
 
 The settings for experiments specific is placed in the folder [configs](configs)
 
-We provide an implementation for the QM9 experiments, the fullerene-MD, the Pt/graphene-MD and SmFe12-MD experiments
+We provide an implementation for the QM9 experiments, the fullerene-MD, the Pt/graphene-MD, Material Project 2018.6.1, and SmFe12-CD [3] experiments.
 
 # Basic usage
+## Data preprocessing
+For training new model for each datasets, please follow the below example scripts. If the data is not avaiable, please run the code ```preprocess_data.py``` for downloading and creating suitable data formats for SCANNet model. For example:
+```
+$ python preprocess_data.py qm9 processed_data --dt=4.0 --wt=0.4 --p=8
+
+-----
+
+$ python preprocess_data.py mp2018 processed_data --dt=6.0 --wt=0.4 --p=8
+
+```
+The data for <b>QM9</b> or <b>Material Project 2018</b> will be automatically downloaded and processed into folder [propessed_data](processed_data). For all avaiable datasets and options for cutoff, please run ```python preprocess.py --h``` to show all details.
+
 ## Model training
-For training new model for QM9 dataset, please follow the below example scripts. If the data for QM9 is not avaiable, please run the code ```preprocess_data.py``` for downloading and creating suitable data formats for SCANNet model.
-```
-python preprocess_data.py qm9 processed_data --dt=4.0 --wt=0.2
-```
-The data for QM9 will be processed and saved into folder [propessed_data](processed_data).
 After that, please change the config file located in folder [configs](configs) for customizing the model hyperparameters or data loading/saving path.
 ```
-python train.py homo configs/model_qm9.yaml --use_ring=True
+$ python train.py homo configs/model_qm9.yaml --use_drop=True
 ```
 
 For training dataset fullerene-MD with pretrained weights from QM9 dataset, please follow these steps. The pretrained model will be load based on the path from argument. 
 ```
-python preprocess_data.py fullerene processed_data --data_path='experiments/fullerene' --dt=4.0 --wt=0.2
-...
-python train.py homo configs/model_fullerene.yaml --use_ring=True --pretrained=..../qm9/homo/models/model.h5
+$ python train.py homo configs/model_fullerene.yaml --pretrained=.../qm9/homo/models/model.h5
 ```
 ## Model inference
-The code ```predict_files.py``` supports loading a ```xyz``` file and predicting the properties with the pretrained models. The information about global attention (GA) score for interpreting the structure-property relationship is also provided and saved into ```xyz``` format. Please use a visualization tool such as Ovito [2] for showing the results.
+The code ```predict_files.py``` supports loading a ```xyz``` file and predicting the properties with the pretrained models. The information about global attention (GA) score for interpreting the structure-property relationship is also provided and saved into ```xyz``` format. Please use a visualization tool such as Ovito [4] for showing the results.
 ```
-python predict_files.py ..../models.h5 save_path.../ experiments/molecules/Dimethyl_fumarate.xyz
+$ python predict_files.py ..../models.h5 save_path.../ experiments/molecules/Dimethyl_fumarate.xyz
 ``` 
 ![Visualization of GA scores](resources/ovito_visual.png)
 <div align='center'><strong>Figure 2. Example of SCANNet prediction for LUMO property.</strong></div>
@@ -116,4 +128,8 @@ python predict_files.py ..../models.h5 save_path.../ experiments/molecules/Dimet
 
 [1] Ramakrishnan, R., Dral, P., Rupp, M. et al. Quantum chemistry structures and properties of 134 kilo molecules. Sci Data 1, 140022 (2014). https://doi.org/10.1038/sdata.2014.22 
 
-[2] A. Stukowski, Visualization and Analysis of Atomistic Simulation Data with OVITO–the Open Visualization Tool, Model. Simul. Mater. Sci. Eng. 18, 15012 (2009). [doi:10.1088/0965-0393/18/1/015012](https://stacks.iop.org/0965-0393/18/015012)
+[2] Xie, T. & Grossman, J. C. Crystal graph convolutional neural networks for an accurate and interpretable prediction of material properties. Phys. Rev. Lett. 120, 145301 (2018). https://doi.org/10.1021/acs.chemmater.9b01294
+
+[3] Nguyen, DN., Kino, H., Miyake, T. et al. Explainable active learning in investigating structure–stability of SmFe<sub>12-α-β</sub> X<sub>α</sub>Y<sub>β</sub> structures X, Y {Mo, Zn, Co, Cu, Ti, Al, Ga}. MRS Bulletin 48, 31–44 (2023). https://doi.org/10.1557/s43577-022-00372-9
+
+[4] A. Stukowski, Visualization and Analysis of Atomistic Simulation Data with OVITO–the Open Visualization Tool, Model. Simul. Mater. Sci. Eng. 18, 15012 (2009). https://doi.org/10.1088/0965-0393/18/1/015012

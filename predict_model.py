@@ -25,6 +25,9 @@ def set_seed(seed=2134):
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(seed)
 
+    physical_devices = tf.config.experimental.list_physical_devices("GPU")
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
 
 def main(args):
     set_seed(0)

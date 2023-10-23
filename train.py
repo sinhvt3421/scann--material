@@ -70,7 +70,7 @@ if __name__ == "__main__":
         "--use_ring",
         type=bool,
         default=False,
-        help="Whether to use ring as extra emedding",
+        help="Whether to use ring/aromatic as extra emedding",
     )
 
     parser.add_argument(

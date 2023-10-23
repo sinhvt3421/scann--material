@@ -1,7 +1,7 @@
 # Table of Contents
 
 * [Introduction](#introduction)
-* [SCANNet Framework](#scannet-framework)
+* [SCANN Framework](#scann-framework)
 * [Usage](#usage)
 * [Datasets](#datasets)
 * [References](#references)
@@ -9,8 +9,7 @@
 <a name="introduction"></a>
 
 # Introduction
-This repository is the official implementation of [Deep learning reveals key aspects to help interpret the structure–property
-relationships of materials](https://).
+This repository is the official implementation of [Towards understanding structure–property relations in materials with interpretable deep learning](https://).
 
 Please cite us as
 
@@ -18,7 +17,7 @@ Please cite us as
 
 ```
 
-We developed a `Self-Consistent Atention-based Neural Network (SCANNet)` that takes advantage of a neural network to quantitatively capture
+We developed a `Self-Consistent Atention-based Neural Network (SCANN)` that takes advantage of a neural network to quantitatively capture
 the contribution of the local structure of material properties.
 
 The model captures information on atomic sites
@@ -32,14 +31,14 @@ the structural-property relationships of the materials.
 
 <a name="DeepAt-framework"></a>
 
-# SCANNet framework
+# SCANN framework
 
-The Self-Consistent Atention-based Neural Network (SCANNet) is an implementation of deep attention mechanism for materials science
+The Self-Consistent Atention-based Neural Network (SCANN) is an implementation of deep attention mechanism for materials science.
 
 Figure 1 shows the overall schematic of the model
 
 ![Model architecture](resources/model_semantic.jpg)
-<div align='center'><strong>Figure 1. Schematic of  SCANNet.</strong></div>
+<div align='center'><strong>Figure 1. Schematic of  SCANN.</strong></div>
 
 <a name="usage"></a>
 
@@ -64,7 +63,7 @@ The MAEs on the various models are given below:
 
 ### Performance on QM9
 
-| Property | Units      | SCANNet   | SCANNet<sup>+</sup>|
+| Property | Units      | SCANN   | SCANN<sup>+</sup>|
 |----------|------------|-------|-------|
 | HOMO     | meV         | 41 | 32 |
 | LUMO     | meV         | 37 |31|
@@ -74,7 +73,7 @@ The MAEs on the various models are given below:
 
 ### Performance  on Material Project 2018.6.1
 
-| Property | Units      | SCANNet   | SCANNet<sup>+</sup>|
+| Property | Units      | SCANN   | SCANN<sup>+</sup>|
 |----------|------------|-------|-------|
 | Ef     | meV(atom)<sup>-1</sup>        | 29 | 28 |
 | Eg     | meV         | 260 |225|
@@ -92,7 +91,7 @@ We provide an implementation for the QM9 experiments, the fullerene-MD, the Pt/g
 
 # Basic usage
 ## Data preprocessing
-For training new model for each datasets, please follow the below example scripts. If the data is not avaiable, please run the code ```preprocess_data.py``` for downloading and creating suitable data formats for SCANNet model. For example:
+For training new model for each datasets, please follow the below example scripts. If the data is not avaiable, please run the code ```preprocess_data.py``` for downloading and creating suitable data formats for SCANN model. For example:
 ```
 $ python preprocess_data.py qm9 processed_data --dt=4.0 --wt=0.4 --p=8
 
@@ -101,7 +100,7 @@ $ python preprocess_data.py qm9 processed_data --dt=4.0 --wt=0.4 --p=8
 $ python preprocess_data.py mp2018 processed_data --dt=6.0 --wt=0.4 --p=8
 
 ```
-The data for <b>QM9</b> or <b>Material Project 2018</b> will be automatically downloaded and processed into folder [propessed_data](processed_data). For all avaiable datasets and options for cutoff, please run ```python preprocess.py --h``` to show all details.
+The data for <b>QM9</b> or <b>Material Project 2018</b> will be automatically downloaded and processed into folder [propessed_data](processed_data). For all avaiable datasets and options for cutoff distance/Voronoi angle, please run ```python preprocess.py --h``` to show all details.
 
 ## Model training
 After that, please change the config file located in folder [configs](configs) for customizing the model hyperparameters or data loading/saving path.
@@ -113,13 +112,19 @@ For training dataset fullerene-MD with pretrained weights from QM9 dataset, plea
 ```
 $ python train.py homo configs/model_fullerene.yaml --pretrained=.../qm9/homo/models/model.h5
 ```
+
+For running the evaluation from pretrained weights, please follow these steps.
+```
+$ python train.py homo ..../qm9/homo/configs.yaml --pretrained=.../qm9/homo/models/model.h5  --mode=eval 
+```
+
 ## Model inference
 The code ```predict_files.py``` supports loading a ```xyz``` file and predicting the properties with the pretrained models. The information about global attention (GA) score for interpreting the structure-property relationship is also provided and saved into ```xyz``` format. Please use a visualization tool such as Ovito [4] for showing the results.
 ```
 $ python predict_files.py ..../models.h5 save_path.../ experiments/molecules/Dimethyl_fumarate.xyz
 ``` 
 ![Visualization of GA scores](resources/ovito_visual.png)
-<div align='center'><strong>Figure 2. Example of SCANNet prediction for LUMO property.</strong></div>
+<div align='center'><strong>Figure 2. Example of SCANN prediction for LUMO property.</strong></div>
 
 <a name="usage"></a>
 

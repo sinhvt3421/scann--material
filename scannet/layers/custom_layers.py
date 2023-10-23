@@ -39,7 +39,7 @@ class GaussianExpansion(tf.keras.layers.Layer):
 
     """
 
-    def __init__(self, centers, **kwargs):
+    def __init__(self, centers, width=0.5, **kwargs):
         """
         Args:
             centers (np.ndarray): Gaussian basis centers
@@ -47,7 +47,12 @@ class GaussianExpansion(tf.keras.layers.Layer):
             **kwargs:
         """
         self.centers = centers
-        self.width = np.diff(self.centers).mean()
+
+        if width is None:
+            self.width = np.diff(self.centers).mean()
+        else:
+            self.width = width**2
+
         super().__init__(**kwargs)
 
     def call(self, inputs, masks=None):
@@ -59,7 +64,7 @@ class GaussianExpansion(tf.keras.layers.Layer):
             masks (tf.Tensor): bool tensor, not used here
         """
         return tf.math.exp(
-            -((tf.expand_dims(inputs, -1) - tf.expand_dims(tf.expand_dims(self.centers, 0), 0)) ** 2) / self.width**2
+            -((tf.expand_dims(inputs, -1) - tf.expand_dims(tf.expand_dims(self.centers, 0), 0)) ** 2) / self.width
         )
 
     def get_config(self):

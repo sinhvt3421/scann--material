@@ -22,7 +22,7 @@ conversions = [
     1.0,
     1.0,
     1.0,
-    Bohr**3 / Ang**3,
+    1.0,
     Hartree / eV,
     Hartree / eV,
     Hartree / eV,

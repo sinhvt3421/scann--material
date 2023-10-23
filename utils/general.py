@@ -118,10 +118,10 @@ def load_dataset(dataset, dataset_neighbor, target_prop, use_ref=False, use_ring
     data_full = np.load(dataset, allow_pickle=True)
 
     if use_ref:
-        print("Using reference energy optimization")
+        print("Using reference energy optimization", "\n")
 
     if use_ring:
-        print("Using ring aromatic information")
+        print("Using ring aromatic information", "\n")
 
     data_energy = [
         [d["Atomic"], float(d["Properties"][target_prop]), np.stack([d["Features"][x] for x in d["Features"]], -1)]

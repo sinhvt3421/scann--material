@@ -29,10 +29,10 @@ def set_seed(seed=2134):
 
 
 def main(args):
-    set_seed(2134)
+    set_seed(0)
 
     config = yaml.safe_load(open(args.dataset))
-    print("Create model use Ring Information: ", args.use_ring)
+    print("Create model use Ring Information: ", args.use_ring, "\n")
 
     config["model"]["feature"] = args.feature
     config["model"]["use_ring"] = args.use_ring
@@ -44,15 +44,15 @@ def main(args):
 
     scannet = SCANNet(config, args.pretrained)
 
-    print("Load data for dataset: ", args.dataset, " with target: ", args.target)
+    print("Load data for dataset: ", args.dataset, " with target: ", args.target, "\n")
     scannet.prepare_dataset()
 
     if args.mode == "train":
-        print("Start Model training")
+        print("Start Model training", "\n")
         start = time.time()
         scannet.train(1000)
 
-        print("Training time: ", time.time() - start)
+        print("Training time: ", time.time() - start, "\n")
 
     print("Start Model evaluation:")
     # Evaluate for testset

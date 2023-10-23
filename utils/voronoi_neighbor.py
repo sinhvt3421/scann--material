@@ -46,7 +46,7 @@ def compute_voronoi_neighbor(struct, cutoff=7, d_thresh=4.0, w_thresh=0.4, max_c
                         ]
                         for nn in nns
                         if nn["solid_angle"] >= w_thresh
-                        and nn["solid_angle"] / max_weight > 0.2
+                        and nn["solid_angle"] / max_weight >= 0.2
                         and np.linalg.norm(struct[i].coords - nn["site"].coords) <= d_thresh
                     ]
                 )

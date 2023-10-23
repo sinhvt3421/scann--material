@@ -48,9 +48,15 @@ class SCANNet:
         """
         self.config = config
         self.model = None
+        self.mean, self.std = 0, 1
+
+        if "target_mean" in self.config["hyper"]:
+            self.mean = float(self.config["hyper"]["target_mean"])
+            self.std = float(self.config["hyper"]["target_std"])
+
         if mode == "train" or mode == "eval":
             if pretrained:
-                print("load pretrained model from ", pretrained)
+                print("load pretrained model from ", pretrained, "\n")
                 self.model = create_model_pretrained(pretrained)
                 self.config["hyper"]["pretrained"] = pretrained
 
@@ -85,6 +91,15 @@ class SCANNet:
             target_prop=self.config["hyper"]["target"],
         )
 
+        if self.config["hyper"]["scaler"]:
+            target = [d[1] for d in data_energy]
+            self.mean, self.std = np.mean(target, dtype="float32"), np.std(target, dtype="float32")
+            print("Normalize dataset property with mean: ", self.mean, " , std: ", self.std, "\n")
+            data_energy[:, 1] = (data_energy[:, 1] - self.mean) / self.std
+
+        self.config["hyper"]["target_mean"] = str(self.mean)
+        self.config["hyper"]["target_std"] = str(self.std)
+
         self.config["hyper"]["data_size"] = len(data_energy)
         if split:
             train, valid, test, extra = split_data(
@@ -105,6 +120,7 @@ class SCANNet:
                 len(valid),
                 " , Number of test data: ",
                 len(test),
+                "\n",
             )
 
             self.trainIter, self.validIter, self.testIter = [
@@ -156,7 +172,7 @@ class SCANNet:
                 t0=50,
                 tmult=2,
                 lr_max_compression=1.2,
-                trigger_val_mae=0.3,
+                trigger_val_mae=300,
             )
             sgdr = LearningRateScheduler(lr.lr_scheduler)
 
@@ -189,11 +205,6 @@ class SCANNet:
         ):
             os.makedirs("{}_{}/models/".format(self.config["hyper"]["save_path"], self.config["hyper"]["target"]))
 
-        shutil.copy(
-            "scannet/layers/attention.py",
-            "{}_{}/attention.py".format(self.config["hyper"]["save_path"], self.config["hyper"]["target"]),
-        )
-
         callbacks = self.create_callbacks()
 
         yaml.safe_dump(
@@ -223,7 +234,7 @@ class SCANNet:
     def evaluate(self):
         # Predict for testdata
         if not hasattr(self, "model"):
-            print("Load best validation weight for predicting testset")
+            print("Load best validation weight for predicting testset", "\n")
             self.model = load_model(
                 "{}_{}/models/model_{}.h5".format(
                     self.config["hyper"]["save_path"],
@@ -252,13 +263,18 @@ class SCANNet:
             " : R2 score: ",
             r2_score(y, y_predict),
             " and MAE: ",
-            mean_absolute_error(y, y_predict),
+            mean_absolute_error(y, y_predict) * self.std,
         )
         with open(
             "{}_{}/report.txt".format(self.config["hyper"]["save_path"], self.config["hyper"]["target"]),
             "w",
         ) as f:
-            f.write("Test MAE: " + str(mean_absolute_error(y, y_predict)) + ", Test R2: " + str(r2_score(y, y_predict)))
+            f.write(
+                "Test MAE: "
+                + str(mean_absolute_error(y, y_predict) * self.std)
+                + ", Test R2: "
+                + str(r2_score(y, y_predict))
+            )
 
         if hasattr(self, "hist"):
             save_data = [y_predict, y, self.hist.history]
@@ -272,16 +288,19 @@ class SCANNet:
                 "{}_{}/report.txt".format(self.config["hyper"]["save_path"], self.config["hyper"]["target"]),
                 "w",
             ) as f:
-                f.write("Training MAE: " + str(min(self.hist.history["mae"])) + "\n")
-                f.write("Val MAE: " + str(min(self.hist.history["val_mae"])) + "\n")
+                f.write("Training MAE: " + str(min(self.hist.history["mae"]) * self.std) + "\n")
+                f.write("Val MAE: " + str(min(self.hist.history["val_mae"]) * self.std) + "\n")
                 f.write(
-                    "Test MAE: " + str(mean_absolute_error(y, y_predict)) + ", Test R2: " + str(r2_score(y, y_predict))
+                    "Test MAE: "
+                    + str(mean_absolute_error(y, y_predict) * self.std)
+                    + ", Test R2: "
+                    + str(r2_score(y, y_predict))
                 )
 
             print("Saved model record for dataset")
 
     def predict_data(self, ip):
-        return self.model.predict(ip)
+        return self.model.predict(ip) * self.std + self.mean
 
 
 def create_model_pretrained(pretrained):
@@ -319,7 +338,7 @@ def create_model(config):
         neighbor_distance,
     ]
     if cfm["use_ring"]:
-        ring_info = Input(name="ring_aromatic", shape=(None, 5), dtype="float32")
+        ring_info = Input(name="ring_aromatic", shape=(None, 2), dtype="float32")
         inputs.append(ring_info)
 
     # Embedding atom and extra information as ring, aromatic
@@ -340,13 +359,13 @@ def create_model(config):
 
     neighbor_indices = Lambda(gather_shape, name="get_neighbor")(neighbor)
 
-    neighbor_distance = GaussianExpansion(np.linspace(0, cfm["gaussian_d"], 40, dtype="float32"))(neighbor_distance)
+    neighbor_distance = GaussianExpansion(np.linspace(0, cfm["gaussian_d"], 20, dtype="float32"))(neighbor_distance)
 
     if cfm["g_update"]:
         neighbor_distance = Dense(cfm["local_dim"], activation="swish", name="neighbor_d", dtype="float32")(
             neighbor_distance
         )
-        neighbor_weight = GaussianExpansion(np.linspace(0, np.pi * 2, 40, dtype="float32"))(neighbor_weight)
+        neighbor_weight = GaussianExpansion(np.linspace(0, np.pi * 2, 20, dtype="float32"))(neighbor_weight)
 
         neighbor_weight = Dense(cfm["local_dim"], activation="swish", name="neighbor_w", dtype="float32")(
             neighbor_weight

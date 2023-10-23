@@ -102,7 +102,7 @@ class LocalAttention(keras.layers.Layer):
             self.layer_norm_g = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
         if self.dropout:
-            self.drop_out = tf.keras.layers.Dropout(0.1)
+            self.drop_out = tf.keras.layers.Dropout(0.05)
 
     def call(self, atom_query, atom_neighbor, neighbor_geometry, mask, neighbor_weight=None):
         """

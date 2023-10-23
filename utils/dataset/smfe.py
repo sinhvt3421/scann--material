@@ -28,7 +28,8 @@ def process_smfe(save_path):
     print("Done.")
 
     print("Loading files...")
-    all_files = sorted(glob.glob(tmpdir + "/*/*.xyz"))
+    zipfile.ZipFile(zip_path).extractall(tmpdir)
+    all_files = sorted(glob.glob(tmpdir + "/*/*/*.xyz"))
     print("Loading all files :", len(all_files))
 
     all_struct = []

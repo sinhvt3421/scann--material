@@ -2,6 +2,7 @@
 
 * [Introduction](#introduction)
 * [SCANN Framework](#scann-framework)
+* [Installation](#installation)
 * [Usage](#usage)
 * [Datasets](#datasets)
 * [References](#references)
@@ -42,11 +43,64 @@ Figure 1 shows the overall schematic of the model
 
 <a name="usage"></a>
 
+# Installation
+
+Firstly, create a conda environment to install the package, for example:
+```
+conda create -n test python==3.9
+source activate test
+```
+
+### Optional GPU dependencies
+
+For hardwares that have CUDA support, the <b>tensorflow version with gpu options</b> should be installed. Please follow the installation from https://www.tensorflow.org/install for more details.
+
+Tensorflow can  also be installed from ```conda``` for simplification settings:
+```
+conda install -c conda-forge tensorflow-gpu
+```
+
+#### Method 1 (directly install from git)
+You can install the lastes development version of SCANN from this repo and install using:
+```
+git clone https://github.com/sinhvt3421/scann-material
+cd scann-material
+python -m pip install -e .
+```
+
+#### Method 2 (using pypi)
+SCANN can be installed via pip for the latest stable version:
+```
+pip install scann-model
+```
+
 # Usage
 
 Our current implementation supports a variety of use cases for users with
 different requirements and experience with deep learning. Please also visit
 the [notebooks directory](notebooks) for Jupyter notebooks with more detailed code examples.
+
+Below is an example of predicting the "HOMO" and corresponding global attention score:
+
+```python
+from scann.utils import load_file, prepare_input_pmt
+from scann.models import SCANN
+import yaml
+
+#load config and pretrained model from folders
+
+config = yaml.safe_load(open('trained_model/homo/config.yaml'))
+scann = SCANN(config, pretrained='trained_model/homo/model_homo.h5', mode='infer')
+
+#load file for structure using pymatgen Structure 
+
+struct = load_file('abc.xyz') # pymatgen.core.Structure 
+inputs = prepare_input_pmt(struct, d_t=4.0, w_t=0.4, angle=False)  # Distance, weights threshold
+
+# Predict the target property with the ga score for interpretation
+pre_target, ga_score = scann.model.predict(inputs)
+
+```
 
 ## Using pre-built models
 

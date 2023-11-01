@@ -1,11 +1,12 @@
 import os
 
 import numpy as np
+
 from openbabel import pybel
 from pymatgen.core import Molecule, Structure
 from sklearn.model_selection import train_test_split
 
-from utils.dataset import atomic_numbers, atoms_symbol
+from scann.utils.dataset import atomic_numbers, atoms_symbol
 
 from .voronoi_neighbor import compute_voronoi_neighbor
 
@@ -167,16 +168,42 @@ def process_xyz_pmt(file):
             atoms.append(atom)
             coords.append([x, y, z])
 
+        struct = {"Atoms": atoms, "Coords": coords}
         if lattice:
-            structure = Structure(lattice, atoms, coords, coords_are_cartesian=True)
+            struct["Latiice"] = lattice
+
+    return struct
+
+
+def load_file(file, mol=False):
+    """
+
+    Args:
+        file (str): path to file. All formats supported by Pymatgen (cif/POSCAR/xyz/mol)
+        mol (bool, optional): Whether the file contains molecule structure. Defaults to False.
+
+    Returns:
+        Structure (Pymatgen): Structure class from Pymatgen
+    """
+    try:
+        if mol:
+            struct = Molecule.from_file(file)
+            coord = struct.cart_coords
+            a = max(10, max(coord[:, 0]) - min(coord[:, 0]) + 0.1)
+            b = max(10, max(coord[:, 1]) - min(coord[:, 1]) + 0.1)
+            c = max(10, max(coord[:, 2]) - min(coord[:, 2]) + 0.1)
+
+            struct = struct.get_boxed_structure(a, b, c, reorder=False)
         else:
-            lattice = [[60, 0, 0], [0, 60, 0], [0, 0, 60]]
-            structure = Structure(lattice, atoms, coords, coords_are_cartesian=True)
+            struct = Structure.from_file(file)
 
-    return structure
+        return struct
+    except:
+        print("Can not read file using Pymatgen. Please check the file format")
+        return None
 
 
-def prepare_input_pmt(struct, d_t=4.0, w_t=0.4):
+def prepare_input_pmt(struct, d_t=4.0, w_t=0.4, angle=True):
     """
 
     Args:
@@ -188,93 +215,24 @@ def prepare_input_pmt(struct, d_t=4.0, w_t=0.4):
         dict: input dictionary for model input
     """
 
-    cutoff = 60
-
-    neighbors = compute_voronoi_neighbor(struct, cutoff, d_t, w_t)
+    neighbors = compute_voronoi_neighbor(struct, d_thresh=d_t, w_thresh=w_t)
 
     local_neighbor = np.array([pad_sequence([[n[1] for n in lc] for lc in neighbors], value=1000)], "int32")
     mask_local = local_neighbor != 1000
     local_neighbor[local_neighbor == 1000] = 0
 
-    local_weight = np.array([pad_sequence([[n[2] for n in lc] for lc in neighbors], dtype="float32")])
+    local_weight = np.array([pad_sequence([[n[2 if angle else 3] for n in lc] for lc in neighbors], dtype="float32")])
     local_distance = np.array(
         [
             pad_sequence(
-                [[n[3] for n in lc] for lc in neighbors],
+                [[n[-1] for n in lc] for lc in neighbors],
                 dtype="float32",
             )
         ]
     )
 
-    atomics = np.array([[atomic_numbers[x.species_string] for x in struct]], "int32")
+    atomics = np.array([struct.atomic_numbers], "int32")
     mask_atom = atomics != 0
-
-    inputs = {
-        "atomic": atomics,
-        "atom_mask": np.expand_dims(mask_atom, -1),
-        "neighbors": local_neighbor,
-        "neighbor_mask": mask_local,
-        "neighbor_weight": np.expand_dims(local_weight, -1),
-        "neighbor_distance": local_distance,
-    }
-
-    return inputs
-
-
-def process_mol_xyz(file):
-    mol = next(pybel.readfile("xyz", file))
-    atoms = [x.OBAtom for x in mol.atoms]
-
-    coordinates = np.array([x.coords for x in mol.atoms], dtype="float32")
-
-    atomics = [x.GetAtomicNum() for x in atoms]
-    atomic_symbols = [atoms_symbol[str(x)] for x in atomics]
-
-    ring_info = [at.IsInRing() for at in atoms]
-    aromatic = [at.IsAromatic() for at in atoms]
-
-    chiral = [at.IsChiral() for at in atoms]
-    acceptor = [at.IsHbondAcceptor() for at in atoms]
-    donor = [at.IsHbondDonorH() if at.GetAtomicNum() == 1 else at.IsHbondDonor() for at in atoms]
-    nstruct = {
-        "Atoms": atomic_symbols,
-        "Atomic": atomics,
-        "Coords": coordinates,
-        "Ring": ring_info,
-        "Aromatic": aromatic,
-        "Features": {"Ring": ring_info, "Aromatic": aromatic, "Chiral": chiral, "Acceptor": acceptor, "Donor": donor},
-    }
-
-    return nstruct
-
-
-def prepare_mol(struct, d_t=4.0, w_t=0.4, use_features=True):
-    system_atom = struct["Atoms"]
-    system_coord = np.array(struct["Coords"], dtype="float32")
-
-    structure = Structure([[30, 0, 0], [0, 30, 0], [0, 0, 30]], system_atom, system_coord, coords_are_cartesian=True)
-
-    neighbors = compute_voronoi_neighbor(structure, 30, d_t, w_t)
-
-    local_neighbor = np.array([pad_sequence([[n[1] for n in lc] for lc in neighbors], value=1000)], "int32")
-    mask_local = local_neighbor != 1000
-    local_neighbor[local_neighbor == 1000] = 0
-
-    local_weight = np.array([pad_sequence([[n[2] for n in lc] for lc in neighbors], dtype="float32")])
-    local_distance = np.array(
-        [
-            pad_sequence(
-                [[n[3] for n in lc] for lc in neighbors],
-                dtype="float32",
-            )
-        ]
-    )
-
-    atomics = np.array([struct["Atomic"]], "int32")
-    mask_atom = atomics != 0
-
-    if use_features:
-        extra_info = [np.stack([struct["Features"][x] for x in struct["Features"]], -1)]
 
     inputs = {
         "atomic": atomics,
@@ -284,8 +242,5 @@ def prepare_mol(struct, d_t=4.0, w_t=0.4, use_features=True):
         "neighbor_weight": local_weight,
         "neighbor_distance": local_distance,
     }
-
-    if use_features:
-        inputs["ring_aromatic"] = np.array(extra_info, "int32")
 
     return inputs

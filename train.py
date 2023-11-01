@@ -10,7 +10,7 @@ import numpy as np
 import tensorflow as tf
 import yaml
 
-from scannet.models import SCANNet
+from scann.models import SCANN
 
 
 def set_seed(seed=2134):
@@ -42,21 +42,21 @@ def main(args):
     config["hyper"]["target"] = args.target
     config["hyper"]["pretrained"] = args.pretrained
 
-    scannet = SCANNet(config, args.pretrained)
+    scann = SCANN(config, args.pretrained)
 
     print("Load data for dataset: ", args.dataset, " with target: ", args.target, "\n")
-    scannet.prepare_dataset()
+    scann.prepare_dataset()
 
     if args.mode == "train":
         print("Start Model training", "\n")
         start = time.time()
-        scannet.train(1000)
+        scann.train(1000)
 
         print("Training time: ", time.time() - start, "\n")
 
     print("Start Model evaluation:")
     # Evaluate for testset
-    scannet.evaluate()
+    scann.evaluate()
 
 
 if __name__ == "__main__":

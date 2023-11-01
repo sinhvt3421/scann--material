@@ -1,7 +1,7 @@
 import gc
 import os
-import time
-import shutil
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import numpy as np
 import tensorflow as tf
@@ -13,11 +13,24 @@ from tensorflow.keras.callbacks import *
 from tensorflow.keras.layers import Dense, Dropout, Embedding, Input, Lambda, Multiply
 from tensorflow.keras.models import load_model
 
-from scannet.layers import *
-from scannet.layers import _CUSTOM_OBJECTS
-from scannet.losses import *
-from utils.datagenerator import DataIterator
-from utils.general import load_dataset, split_data
+from scann.layers import *
+from scann.layers import _CUSTOM_OBJECTS
+from scann.utils.datagenerator import DataIterator
+from scann.utils.general import load_dataset, split_data
+
+
+def root_mean_squared_error(y_true, y_pred):
+    return K.sqrt(K.mean(K.square(y_pred - y_true)))
+
+
+def mean_squared_error(y_true, y_pred):
+    return K.mean(K.square(y_pred - y_true))
+
+
+def r2_square(y_true, y_pred):
+    SS_res = K.sum(K.square(y_true - y_pred))
+    SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
+    return 1 - SS_res / (SS_tot + K.epsilon())
 
 
 class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
@@ -26,9 +39,9 @@ class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
         print("current_lr=", lr)
 
 
-class SCANNet:
+class SCANN:
     """
-    Implements main SCANNet
+    Implements main SCANN
     """
 
     def __init__(self, config=None, pretrained="", mode="train"):

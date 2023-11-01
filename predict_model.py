@@ -11,7 +11,7 @@ import random
 
 from sklearn.metrics import mean_absolute_error, r2_score
 
-from scannet.models import SCANNet
+from scann.models import SCANN
 
 
 def set_seed(seed=2134):
@@ -34,7 +34,7 @@ def main(args):
     config = yaml.safe_load(open(os.path.join(args.trained_model, "config.yaml")))
 
     print("Load pretrained weight for target ", config["hyper"]["target"])
-    scannet = SCANNet(
+    SCANN = SCANN(
         config,
         os.path.join(
             args.trained_model,
@@ -45,17 +45,17 @@ def main(args):
     )
 
     print("Load data for trained model: ", config["hyper"]["data_energy_path"])
-    scannet.prepare_dataset(split=False)
+    SCANN.prepare_dataset(split=False)
 
     ga_scores = []
     struct_energy = []
     y = []
     idx = 0
-    data = scannet.dataIter
+    data = SCANN.dataIter
 
     for i in range(len(data)):
         inputs, target = data.__getitem__(i)
-        energy, attn_global = scannet.predict_data(inputs)
+        energy, attn_global = SCANN.predict_data(inputs)
 
         ga_scores.extend(attn_global)
 

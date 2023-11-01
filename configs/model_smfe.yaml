@@ -1,0 +1,27 @@
+model:
+  n_atoms: 70
+  embedding_dim: 48
+  n_attention: 9
+  local_dim: 128
+  num_head: 8
+  global_dim: 128
+  dense_out: 128
+  scale: 0.5
+  use_attn_norm: True
+  use_ga_norm: True
+  use_ring: False
+  g_update: False
+  gaussian_d: 6.0
+hyper:
+  batch_size: 128
+  test_percent: 0.05
+  scheduler: "cosine"
+  train_size: ""
+  test_size: ""
+  data_size: 3304
+  data_nei_path: "../data/public/smfe/smfe_data_neighbor_dt6.0_wt0.4.npy"
+  data_energy_path: "../data/public/smfe/smfe_data_energy.npy"
+  lr: 0.0005
+  min_lr: 0.0001
+  save_path: "trained_models/public/model_smfe"
+  pretrained: ""

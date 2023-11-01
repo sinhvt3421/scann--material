@@ -63,7 +63,7 @@ class LocalAttention(keras.layers.Layer):
             num_head (int, optional): Number of head attention use. head dim will be dim // num_head. Defaults to 8.
             v_proj (bool, optional): A Boolen for whether using value project or not. Defaults to True.
             scale (float, optional): A scalar for normalization attention value (default to Transformer paper). Defaults to 0.5.
-            g_update (bool, optional): A Boolen for whether using geometrical update in SCANNet+ or not. Defaults to False.
+            g_update (bool, optional): A Boolen for whether using geometrical update in SCANN+ or not. Defaults to False.
             name (str, optional):  Defaults to 'LA_layer'.
         """
         super(LocalAttention, self).__init__(**kwargs)

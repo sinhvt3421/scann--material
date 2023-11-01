@@ -5,7 +5,7 @@ import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 
 from .general import GaussianDistance, pad_nested_sequences, pad_sequence
-from utils.dataset import atomic_features
+from scann.utils.dataset import atomic_features
 
 
 class DataIterator(Sequence):

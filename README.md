@@ -10,12 +10,12 @@
 <a name="introduction"></a>
 
 # Introduction
-This repository is the official implementation of [Towards understanding structure–property relations in materials with interpretable deep learning](https://).
+This repository is the official implementation of [Towards understanding structure–property relations in materials with interpretable deep learning](https://www.nature.com/articles/s41524-023-01163-9).
 
 Please cite us as
 
 ```
-
+Vu, TS., Ha, MQ., Nguyen, DN. et al. Towards understanding structure–property relations in materials with interpretable deep learning. npj Comput Mater 9, 215 (2023). https://doi.org/10.1038/s41524-023-01163-9
 ```
 
 We developed a `Self-Consistent Atention-based Neural Network (SCANN)` that takes advantage of a neural network to quantitatively capture

@@ -15,7 +15,17 @@ This repository is the official implementation of [Towards understanding structu
 Please cite us as
 
 ```
-Vu, TS., Ha, MQ., Nguyen, DN. et al. Towards understanding structure–property relations in materials with interpretable deep learning. npj Comput Mater 9, 215 (2023). https://doi.org/10.1038/s41524-023-01163-9
+@article{Vu2023,
+doi = {10.1038/s41524-023-01163-9},
+issn = {2057-3960},
+journal = {npj Computational Materials},
+number = {1},
+pages = {215},
+title = {{Towards understanding structure–property relations in materials with interpretable deep learning}},
+url = {https://doi.org/10.1038/s41524-023-01163-9},
+volume = {9},
+year = {2023}
+}
 ```
 
 We developed a `Self-Consistent Atention-based Neural Network (SCANN)` that takes advantage of a neural network to quantitatively capture

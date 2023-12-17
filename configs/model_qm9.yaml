@@ -1,7 +1,7 @@
 model:
   n_atoms: 10
   embedding_dim: 48
-  n_attention: 8
+  n_attention: 7
   local_dim: 128
   num_head: 8
   global_dim: 128
@@ -9,16 +9,20 @@ model:
   scale: 0.5
   use_attn_norm: True
   use_ga_norm: True
-  use_ring: True
+  use_ring: False
+  g_update: True
+  gaussian_d: 4.0
 hyper:
   batch_size: 128
   test_percent: 0.1
-  train_size: ''
-  test_size: ''
+  scaler: True
+  scheduler: "sgdr"
+  train_size: 110000
+  test_size: 10831
   data_size: 130831
-  data_nei_path: 'processed_data/qm9/qm9_data_neighbor_dt4.0_wt0.2.npy'
-  data_energy_path: 'processed_data/qm9/qm9_data_energy.npy'
+  data_nei_path: "../data/public/qm9/qm9_data_neighbor_dt4.0_wt0.4.npy"
+  data_energy_path: "../data/public/qm9/qm9_data_energy.npy"
   lr: 0.0005
   min_lr: 0.0001
-  save_path: 'trained_models/model_qm9'
-  pretrained: 'trained_models/model_qm9_homo/models/model.h5'
+  save_path: "trained_models/public/model_qm9_scannet+"
+  pretrained: ""

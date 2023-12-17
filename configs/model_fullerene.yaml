@@ -1,24 +1,28 @@
 model:
   n_atoms: 10
   embedding_dim: 48
-  n_attention: 8
+  n_attention: 7
   local_dim: 128
   num_head: 8
   global_dim: 128
   dense_out: 128
   scale: 0.5
   use_attn_norm: True
-  use_ga_norm: True
-  use_ring: True
+  use_ga_norm: False
+  use_ring: False
+  g_update: True
+  gaussian_d: 4.0
 hyper:
   batch_size: 128
-  test_percent: 0.1
-  train_size: ''
-  test_size: ''
+  test_percent: 0.05
+  scheduler: "cosine"
+  scaler: True
+  train_size: ""
+  test_size: ""
   data_size: 3000
-  data_nei_path: 'processed_data/fullerene/fullerene_data_neighbor_dt4.0_wt0.2.npy'
-  data_energy_path: 'processed_data/fullerene/fullerene_data_energy.npy'
-  lr: 0.0005
-  min_lr: 0.00005
-  save_path: 'trained_models/model_fullerene'
-  pretrained: ''
+  data_nei_path: "../data/processed_data/fullerene/fullerene_data_neighbor_dt4.0_angle_wt0.4.npy"
+  data_energy_path: "../data/processed_data/fullerene/fullerene_data_energy.npy"
+  lr: 0.0001
+  min_lr: 0.00001
+  save_path: "trained_models/public/model_fullerene_scannet+"
+  pretrained: ""

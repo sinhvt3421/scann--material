@@ -1,0 +1,28 @@
+model:
+  n_atoms: 95
+  embedding_dim: 128
+  n_attention: 9
+  local_dim: 128
+  num_head: 8
+  global_dim: 128
+  dense_out: 128
+  scale: 0.5
+  use_attn_norm: True
+  use_ga_norm: True
+  use_ring: False
+  gaussian_d: 6.0
+  g_update: True
+hyper:
+  batch_size: 64
+  test_percent: 0.1
+  scaler: False
+  train_size: 60000
+  scheduler: "cosine"
+  test_size: 4239
+  data_size: 69106
+  data_nei_path: "../data/public/mp2018/mp2018_data_neighbor_dt6.0_wt0.4.npy"
+  data_energy_path: "../data/public/mp2018/mp2018_data_energy.npy"
+  lr: 0.0001
+  min_lr: 0.00005
+  save_path: "trained_models/public/model_mp2018_scannet+"
+  pretrained: ""

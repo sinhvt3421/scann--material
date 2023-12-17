@@ -10,12 +10,13 @@ model:
   use_attn_norm: True
   use_ga_norm: True
   use_ring: False
-  g_update: False
+  g_update: True
   gaussian_d: 6.0
 hyper:
   batch_size: 128
   test_percent: 0.05
   scheduler: "cosine"
+  scaler: False
   train_size: ""
   test_size: ""
   data_size: 3304
@@ -23,5 +24,5 @@ hyper:
   data_energy_path: "../data/public/smfe/smfe_data_energy.npy"
   lr: 0.0005
   min_lr: 0.0001
-  save_path: "trained_models/public/model_smfe"
+  save_path: "trained_models/public/model_smfe_scannet+"
   pretrained: ""

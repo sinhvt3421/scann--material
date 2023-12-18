@@ -13,7 +13,7 @@ setup(
     version="1.0",
     author="Vu Tien-Sinh",
     author_email="sinh.vt@jaist.ac.jp",
-    url="https://github.com/sinhvt3421/scann-material",
+    url="https://github.com/sinhvt3421/scann--material",
     packages=find_packages(),
     python_requires=">=3.9",
     install_requires=[

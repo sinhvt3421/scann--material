@@ -1,0 +1,3 @@
+CUDA_VISIBLE_DEVICES='2' python predict_files.py trained_models/model_qm9_att8_ring_ga_nov_key_drop_lumo trained_models/model_qm9_att8_ring_ga_nov_key_drop_lumo/molecule experiments/small_molecules/new_mol/Toluen.xyz
+
+CUDA_VISIBLE_DEVICES='2' python predict_files.py trained_models/paper_report/model_fullerene_att8_drop_homo trained_models/paper_report/model_fullerene_att8_drop_homo/molecule experiments/molecules/C60.xyz

@@ -1,5 +1,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://badge.fury.io/py/scann-model.svg)](https://badge.fury.io/py/scann-model)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/sinhvt3421/scann--material)
 [![Downloads](https://pepy.tech/badge/scann-model)](https://pepy.tech/project/scann-model)
+
 
 
 # Table of Contents
@@ -118,7 +121,10 @@ pre_target, ga_score = scann.model.predict(inputs)
 
 ## Using pre-built models
 
-In our work, we have already built models for the QM9 [1] and Material Project 2018 [2] datasets . The model is provided as serialized HDF5+yaml files. 
+In our work, we have already built models for the QM9 [1] and Material Project 2018 [2] datasets . The model is provided as serialized HDF5+yaml files.
+
+Please access [Models and data](https://figshare.com/projects/SCANN_models/181339) for downloading the models and preprocessed data.
+
 
 * QM9 molecule data:
   * HOMO: Highest occupied molecular orbital energy

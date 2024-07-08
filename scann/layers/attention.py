@@ -4,6 +4,18 @@ import tensorflow.keras.backend as K
 from tensorflow.keras import regularizers
 
 
+class AddToken(keras.layers.Layer):
+    def __init__(self, dim=128, **kwargs):
+        super(AddToken, self).__init__()
+        self.dim = dim
+        self.token = tf.Variable(tf.ones((1, 1, self.dim)), dtype="float32", name="prop_token")
+
+    def call(self, centers):
+        bs = tf.shape(centers)[0]
+        tokens = tf.repeat(self.token, (bs, 1, 1))
+        return tf.concat([tokens, centers], 1)
+
+
 class ResidualNorm(keras.layers.Layer):
     def __init__(self, dim=128, dropout_rate=0.1, **kwargs):
         super(ResidualNorm, self).__init__()
@@ -39,7 +51,6 @@ class ResidualNorm(keras.layers.Layer):
 
 
 class LocalAttention(keras.layers.Layer):
-
     """
     Implements a local attention block
     """
@@ -221,7 +232,6 @@ class LocalAttention(keras.layers.Layer):
 
 
 class GlobalAttention(keras.layers.Layer):
-
     """
     Implements a global attention block
     """

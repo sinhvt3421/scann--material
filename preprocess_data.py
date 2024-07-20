@@ -4,8 +4,8 @@ import os
 
 import numpy as np
 
-from utils.dataset import *
-from utils.voronoi_neighbor import parallel_compute_neighbor
+from scann.utils.dataset import *
+from scann.utils.voronoi_neighbor import parallel_compute_neighbor
 
 # Define dictionary mapping dataset names to functions
 dataset_functions = {

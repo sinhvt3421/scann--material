@@ -313,7 +313,10 @@ class SCANN:
             print("Saved model record for dataset")
 
     def predict_data(self, ip):
-        return self.model.predict(ip) * self.std + self.mean
+        out = self.model.predict(ip)
+        if len(out) == 2:
+            return out[0] * self.std + self.mean, out[1]
+        return out * self.std + self.mean
 
 
 def create_model_pretrained(pretrained):
